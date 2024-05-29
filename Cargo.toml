@@ -1,0 +1,30 @@
+[package]
+name = "clojure-reader"
+version = "0.1.0"
+edition = "2021"
+resolver = "2"
+authors = ["Kevin Nakamura <grinkers@grinkers.net>"]
+description = "A Clojure reader"
+readme = "README.org"
+repository = "https://github.com/grinkers/clojure-reader"
+keywords = ["EDN", "no_std", "clojure"]
+license = "zlib"
+
+[lints.rust]
+rust_2018_idioms = { level = "warn", priority = -1 }
+future-incompatible = "warn"
+unsafe_code = "deny"
+
+[lints.clippy]
+nursery = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+inline_always = "allow"
+
+[features]
+default = ["floats", "std"]
+floats = ["ordered-float"]
+std = []
+
+[dependencies]
+ordered-float = { version = "4.1", default-features = false, optional = true }
+
