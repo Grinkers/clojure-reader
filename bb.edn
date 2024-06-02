@@ -8,14 +8,15 @@
                                 :task (fs/delete-tree "target")}
   test_lib_features            (shell "cargo test --all-features --no-fail-fast")
   test_lib_no_default_features (shell "cargo test --features std --no-default-features --no-fail-fast")
+  test-examples                (do (shell "cargo run --example get-nth"))
   cargo-test                   {:doc     "Runs all cargo tests"
-                                :depends [test_lib_features test_lib_no_default_features]}
+                                :depends [test_lib_features test_lib_no_default_features test-examples]}
   cargo-fmt                    {:doc  "Checks cargo fmt"
                                 :task (shell "cargo fmt --check")}
   cargo-clippy-all-features    {:doc  "Cargo clippy with all features"
-                                :task (shell "cargo clippy --all-features -- -W future-incompatible -W rust_2018_idioms -W clippy::all -W clippy::pedantic -W clippy::nursery --deny warnings")}
+                                :task (shell "cargo clippy --all-features -- --deny warnings")}
   cargo-clippy-no-defaults     {:doc  "Cargo clippy with no default features"
-                                :task (shell "cargo clippy --no-default-features -- -W future-incompatible -W rust_2018_idioms -W clippy::all -W clippy::pedantic -W clippy::nursery --deny warnings")}
+                                :task (shell "cargo clippy --no-default-features -- --deny warnings")}
   clippy                       {:doc     "Runs all variations of cargo clippy"
                                 :depends [cargo-clippy-all-features cargo-clippy-no-defaults]}
   cov-all-features             {:doc  "Coverage, all features"

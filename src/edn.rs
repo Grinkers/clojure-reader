@@ -31,6 +31,27 @@ pub fn read_string(edn: &str) -> Result<Edn<'_>, crate::error::Error> {
     crate::parse::parse(edn)
 }
 
+impl<'e> Edn<'e> {
+    pub fn get(&self, e: &Edn<'e>) -> Option<&Edn<'e>> {
+        if let Edn::Map(m) = self {
+            let lol = m.get(e);
+            if let Some(l) = lol {
+                return Some(l);
+            };
+        }
+        None
+    }
+    pub fn nth(&self, i: usize) -> Option<&Edn<'e>> {
+        let vec = match self {
+            Edn::Vector(v) => v,
+            Edn::List(l) => l,
+            _ => return None,
+        };
+
+        vec.get(i)
+    }
+}
+
 const fn char_to_edn(c: char) -> Option<&'static str> {
     match c {
         '\n' => Some("newline"),
