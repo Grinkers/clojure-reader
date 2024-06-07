@@ -36,6 +36,11 @@ mod test {
             err_as_string("(car (cdr) cdrrdrdrr (so (many (parens ())))"),
             "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(45), ptr: Some(44) }"
         );
+
+        assert_eq!(
+            err_as_string("{:foo 42 :bar)"),
+            "EdnError { code: UnmatchedDelimiter(')'), line: Some(1), column: Some(14), ptr: Some(13) }"
+        );
     }
 
     #[test]

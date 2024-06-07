@@ -33,7 +33,9 @@ mod test {
         let e = "{
         :cat \"猫\" ; this is utf-8
         :num -0x9042
+        :r 42/4242
         #_#_:num 9042
+        {:foo \"bar\"} \"foobar\"
         ; dae paren
         :lisp (())
     }";
@@ -42,6 +44,11 @@ mod test {
             Edn::Map(BTreeMap::from([
                 (Edn::Key(":cat"), Edn::Str("猫")),
                 (Edn::Key(":num"), Edn::Int(-36930)),
+                (
+                    Edn::Map(BTreeMap::from([(Edn::Key(":foo"), Edn::Str("bar"))])),
+                    Edn::Str("foobar")
+                ),
+                (Edn::Key(":r"), Edn::Rational((42, 4242))),
                 (Edn::Key(":lisp"), Edn::List(vec![Edn::List(vec![])])),
             ]))
         );
@@ -49,12 +56,14 @@ mod test {
 
     #[test]
     fn sets() {
-        let e = "#{:cat 1 2 [42]}";
+        let e = "#{:cat 1 true #{:cat true} 2 [42]}";
         assert_eq!(
             edn::read_string(e).unwrap(),
             Edn::Set(BTreeSet::from([
                 Edn::Key(":cat"),
                 Edn::Int(1),
+                Edn::Bool(true),
+                Edn::Set(BTreeSet::from([Edn::Key(":cat"), Edn::Bool(true)])),
                 Edn::Int(2),
                 (Edn::Vector(vec![Edn::Int(42)])),
             ]))

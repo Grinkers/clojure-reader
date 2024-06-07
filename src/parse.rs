@@ -16,6 +16,16 @@ struct Walker {
     line: usize,
 }
 
+impl Default for Walker {
+    fn default() -> Self {
+        Self {
+            ptr: 0,
+            column: 1,
+            line: 1,
+        }
+    }
+}
+
 impl Walker {
     // Slurps until whitespace or delimiter, returning the slice.
     #[inline(always)]
@@ -129,12 +139,7 @@ impl Walker {
 }
 
 pub fn parse(edn: &str) -> Result<Edn<'_>, Error> {
-    let mut walker = Walker {
-        ptr: 0,
-        column: 1,
-        line: 1,
-    };
-
+    let mut walker = Walker::default();
     let internal_parse = parse_internal(&mut walker, edn)?;
     internal_parse.map_or_else(|| Ok(Edn::Nil), Ok)
 }
