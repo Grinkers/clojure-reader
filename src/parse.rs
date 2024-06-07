@@ -33,7 +33,7 @@ impl Walker {
         let token = slice[self.ptr..]
             .split(|c: char| c.is_whitespace() || DELIMITERS.contains(&c))
             .next()
-            .unwrap(); // At least an empty slice will always be on the first split, even on an empty str
+            .expect("Expected at least an empty slice");
 
         self.ptr += token.len();
         self.column += token.len();
@@ -98,7 +98,10 @@ impl Walker {
     // Nibbles away until the next new line
     #[inline(always)]
     fn nibble_newline(&mut self, slice: &str) {
-        let len = slice[self.ptr..].split('\n').next().unwrap(); // At least an empty slice will always be on the first split, even on an empty str
+        let len = slice[self.ptr..]
+            .split('\n')
+            .next()
+            .expect("Expected at least an empty slice");
         self.ptr += len.len();
         self.nibble_whitespace(slice);
     }
@@ -416,7 +419,7 @@ fn parse_char(lit: &str) -> Result<Edn<'_>, Code> {
         "return" => Ok(Edn::Char('\r')),
         "tab" => Ok(Edn::Char('\t')),
         "space" => Ok(Edn::Char(' ')),
-        c if c.len() == 1 => Ok(Edn::Char(c.chars().next().unwrap())),
+        c if c.len() == 1 => Ok(Edn::Char(c.chars().next().expect("c must be len of 1"))),
         _ => Err(Code::InvalidChar),
     }
 }
