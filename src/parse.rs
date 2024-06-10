@@ -134,10 +134,11 @@ impl Walker {
   }
 }
 
-pub fn parse(edn: &str) -> Result<Edn<'_>, Error> {
+pub fn parse(edn: &str) -> Result<(Edn<'_>, &str), Error> {
   let mut walker = Walker::default();
   let internal_parse = parse_internal(&mut walker, edn)?;
-  internal_parse.map_or_else(|| Ok(Edn::Nil), Ok)
+  internal_parse
+    .map_or_else(|| Ok((Edn::Nil, &edn[walker.ptr..])), |ip| Ok((ip, &edn[walker.ptr..])))
 }
 
 #[inline]

@@ -14,6 +14,8 @@ use core::fmt;
 #[cfg(feature = "floats")]
 use ordered_float::OrderedFloat;
 
+use crate::{error, parse};
+
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
 #[non_exhaustive]
 pub enum Edn<'e> {
@@ -38,8 +40,28 @@ pub enum Edn<'e> {
 /// # Errors
 ///
 /// See [`crate::error::Error`].
-pub fn read_string(edn: &str) -> Result<Edn<'_>, crate::error::Error> {
-  crate::parse::parse(edn)
+pub fn read_string(edn: &str) -> Result<Edn<'_>, error::Error> {
+  Ok(parse::parse(edn)?.0)
+}
+
+/// Reads the first object from the &str and the remaining unread &str.
+///
+/// # Errors
+///
+/// See [`crate::error::Error`].
+pub fn read(edn: &str) -> Result<(Edn<'_>, &str), error::Error> {
+  let r = parse::parse(edn)?;
+  // Default behavior of Clojure's `read` is to throw an error on EOF, unlike `read_string`
+  // https://clojure.github.io/tools.reader/#clojure.tools.reader.edn/read
+  if r.0 == Edn::Nil && r.1.is_empty() {
+    return Err(error::Error {
+      code: error::Code::UnexpectedEOF,
+      line: None,
+      column: None,
+      ptr: None,
+    });
+  }
+  Ok((r.0, r.1))
 }
 
 impl<'e> Edn<'e> {

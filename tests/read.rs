@@ -167,4 +167,33 @@ mod test {
       ])
     );
   }
+
+  #[test]
+  fn read_forms() {
+    let s = "(def foo 42)(sum '(1 2 3)) #_(foo the bar (cat)) 42 nil 2";
+    let (e, s) = edn::read(s).unwrap();
+    assert_eq!(e, Edn::List(vec![Edn::Symbol("def"), Edn::Symbol("foo"), Edn::Int(42)]));
+
+    let (e, s) = edn::read(s).unwrap();
+    assert_eq!(
+      e,
+      Edn::List(vec![
+        Edn::Symbol("sum"),
+        Edn::Symbol("'"),
+        Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)])
+      ])
+    );
+
+    let (e, s) = edn::read(s).unwrap();
+    assert_eq!(e, Edn::Int(42));
+
+    let (e, s) = edn::read(s).unwrap();
+    assert_eq!(e, Edn::Nil);
+
+    let (e, s) = edn::read(s).unwrap();
+    assert_eq!(e, Edn::Int(2));
+
+    // EOF error
+    assert!(edn::read(s).is_err());
+  }
 }
