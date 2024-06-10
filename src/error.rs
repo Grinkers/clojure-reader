@@ -2,12 +2,13 @@ use core::fmt::{self, Debug};
 use core::str;
 
 pub struct Error {
+  /// Error code. This is `non_exhaustive`.
   pub code: Code,
-  /// Counting from 1.
+  /// Line number, counting from 1.
   pub line: Option<usize>,
-  /// This is a utf-8 char count. Counting from 1.
+  /// Column number, counting from 1. The count is utf-8 chars.
   pub column: Option<usize>,
-  /// This is a pointer into the str trying to be parsed, not a utf-8 char offset
+  /// This is a pointer offset of the str trying to be parsed, not a utf-8 char offset
   pub ptr: Option<usize>,
 }
 

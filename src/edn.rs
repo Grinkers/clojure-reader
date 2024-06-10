@@ -1,3 +1,12 @@
+//! An EDN reader/presenter in Rust.
+//!
+//! ## Implementations
+//! -  [`core::fmt::Display`] will output valid EDN for any Edn object
+//!
+//! ## Differences from Clojure
+//! -  Escape characters are not escaped.
+//! -  Tags are current unimplemented.
+
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 use core::fmt;
@@ -24,9 +33,11 @@ pub enum Edn<'e> {
   Nil,
 }
 
+/// Reads one object from the &str.
+///
 /// # Errors
 ///
-/// See error.rs
+/// See [`crate::error::Error`].
 pub fn read_string(edn: &str) -> Result<Edn<'_>, crate::error::Error> {
   crate::parse::parse(edn)
 }
