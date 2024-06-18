@@ -65,7 +65,7 @@ pub fn read(edn: &str) -> Result<(Edn<'_>, &str), error::Error> {
 }
 
 impl<'e> Edn<'e> {
-  pub fn get(&self, e: &Edn<'e>) -> Option<&Edn<'e>> {
+  pub fn get(&self, e: &Self) -> Option<&Self> {
     if let Edn::Map(m) = self {
       let lol = m.get(e);
       if let Some(l) = lol {
@@ -74,7 +74,7 @@ impl<'e> Edn<'e> {
     }
     None
   }
-  pub fn nth(&self, i: usize) -> Option<&Edn<'e>> {
+  pub fn nth(&self, i: usize) -> Option<&Self> {
     let vec = match self {
       Edn::Vector(v) => v,
       Edn::List(l) => l,
