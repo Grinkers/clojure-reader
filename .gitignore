@@ -2,3 +2,4 @@ Cargo.lock
 /target/
 /.lsp/
 /.clj-kondo/
+/constexpr_edn/target/*
