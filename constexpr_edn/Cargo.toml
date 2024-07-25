@@ -1,0 +1,10 @@
+[package]
+name = "constexpr_edn"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+clojure-reader = { path = ".." }
