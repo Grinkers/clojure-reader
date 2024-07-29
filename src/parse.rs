@@ -129,7 +129,7 @@ impl Walker {
 
   // Peek into the next char
   #[inline(always)]
-  fn peek_next(&mut self, slice: &str) -> Option<char> {
+  fn peek_next(&self, slice: &str) -> Option<char> {
     slice[self.ptr..].chars().next()
   }
 }
