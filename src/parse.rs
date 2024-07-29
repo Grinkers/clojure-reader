@@ -233,6 +233,7 @@ fn parse_set<'e>(walker: &mut Walker, slice: &'e str) -> Result<Edn<'e>, Error> 
   let mut set: BTreeSet<Edn<'_>> = BTreeSet::new();
 
   loop {
+    walker.nibble_whitespace(slice);
     match walker.peek_next(slice) {
       Some('}') => {
         let _ = walker.nibble_next(slice);
@@ -287,6 +288,7 @@ fn parse_map<'e>(walker: &mut Walker, slice: &'e str) -> Result<Edn<'e>, Error> 
   let _ = walker.nibble_next(slice); // Consume the leading '{' char
   let mut map: BTreeMap<Edn<'_>, Edn<'_>> = BTreeMap::new();
   loop {
+    walker.nibble_whitespace(slice);
     match walker.peek_next(slice) {
       Some('}') => {
         let _ = walker.nibble_next(slice);
@@ -332,10 +334,11 @@ fn parse_map<'e>(walker: &mut Walker, slice: &'e str) -> Result<Edn<'e>, Error> 
 
 #[inline]
 fn parse_vector<'e>(walker: &mut Walker, slice: &'e str, delim: char) -> Result<Edn<'e>, Error> {
-  let _ = walker.nibble_next(slice); // Consume the leading '[' char
+  let _ = walker.nibble_next(slice); // Consume the leading '[' or '(' char
   let mut vec = Vec::new();
 
   loop {
+    walker.nibble_whitespace(slice);
     match walker.peek_next(slice) {
       Some(p) => {
         if p == delim {
@@ -349,8 +352,10 @@ fn parse_vector<'e>(walker: &mut Walker, slice: &'e str, delim: char) -> Result<
 
         if let Some(next) = parse_internal(walker, slice)? {
           vec.push(next);
-        } else {
-          let _ = walker.nibble_next(slice);
+        } else if let Some(p) = walker.peek_next(slice) {
+          if p != delim {
+            let _ = walker.nibble_next(slice);
+          }
         }
       }
       _ => {

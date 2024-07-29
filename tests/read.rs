@@ -46,6 +46,31 @@ mod test {
   }
 
   #[test]
+  fn whitespace() {
+    let expected_result = Edn::Map(BTreeMap::from([(
+      Edn::Key(":somevec"),
+      Edn::Vector(vec![Edn::Map(BTreeMap::from([(Edn::Key(":value"), Edn::Int(42))]))]),
+    )]));
+
+    let e = "{:somevec
+ [{:value 42},]
+    }";
+    assert_eq!(edn::read_string(e).unwrap(), expected_result);
+
+    let e = "{:somevec
+ [{:value 42}
+]
+    }";
+    assert_eq!(edn::read_string(e).unwrap(), expected_result);
+
+    let e = "{:somevec
+ [ {:value 42} ; lol
+]
+    }";
+    assert_eq!(edn::read_string(e).unwrap(), expected_result);
+  }
+
+  #[test]
   fn sets() {
     let e = "#{:cat 1 true #{:cat true} 2 [42]}";
     assert_eq!(
