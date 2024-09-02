@@ -1,0 +1,2 @@
+[target.thumbv6m-none-eabi]
+rustflags = [ "--cfg", "portable_atomic_unsafe_assume_single_core" ]

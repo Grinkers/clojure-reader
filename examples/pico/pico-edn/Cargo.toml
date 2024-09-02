@@ -1,0 +1,26 @@
+[package]
+name = "pico-edn"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "picoedn"
+crate-type = ["staticlib"]
+
+[lints.rust]
+rust_2018_idioms = { level = "warn", priority = -1 }
+future-incompatible = "warn"
+
+[lints.clippy]
+pedantic = "warn"
+nursery = "warn"
+
+[dependencies]
+clojure-reader = { version = "*", default-features = false, features = ["floats"] }
+emballoc = { version = "*", features = ["portable_atomic"] }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"

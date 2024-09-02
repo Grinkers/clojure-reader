@@ -21,3 +21,7 @@
 ## floats
 
    Pulls in the dependency `ordered-float` for Edn::Double. Without this feature, parsing floating-point numbers will result in an Err.
+
+# no_std
+
+   See the [pico example](examples/pico) for a minimalistic example of using this crate with the raspberry pi pico (rp2040)
