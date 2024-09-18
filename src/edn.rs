@@ -48,11 +48,12 @@ pub fn read_string(edn: &str) -> Result<Edn<'_>, error::Error> {
 ///
 /// # Errors
 ///
+/// Default behavior of Clojure's `read` is to throw an error on EOF, unlike `read_string`.
+/// <https://clojure.github.io/tools.reader/#clojure.tools.reader.edn/read>
+///
 /// See [`crate::error::Error`].
 pub fn read(edn: &str) -> Result<(Edn<'_>, &str), error::Error> {
   let r = parse::parse(edn)?;
-  // Default behavior of Clojure's `read` is to throw an error on EOF, unlike `read_string`
-  // https://clojure.github.io/tools.reader/#clojure.tools.reader.edn/read
   if r.0 == Edn::Nil && r.1.is_empty() {
     return Err(error::Error {
       code: error::Code::UnexpectedEOF,

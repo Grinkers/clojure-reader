@@ -18,5 +18,11 @@ fn maybe_forty_two<'a>(edn: &'a Edn<'a>) -> Option<&Edn<'a>> {
 
 fn main() {
   let e = edn::read_string("{:foo {猫 {{:foo :bar} [1 2 42 3]}}}").unwrap();
-  println!("{:?}", maybe_forty_two(&e));
+  let edn = maybe_forty_two(&e).unwrap();
+  assert_eq!(edn, &Edn::Int(42));
+}
+
+#[test]
+fn run() {
+  main();
 }

@@ -1,14 +1,14 @@
 {:tasks
  {:init                        (do (def code-cov-env
                                      {"CARGO_INCREMENTAL" "0"
-                                      "RUSTFLAGS" "-Cinstrument-coverage -Copt-level=0 -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off"
+                                      "RUSTFLAGS"         "-Cinstrument-coverage -Copt-level=0 -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off"
                                       "LLVM_PROFILE_FILE" "target/coverage/cargo-test-%p-%m.profraw"}))
   :requires                    ([babashka.fs :as fs])
   clean                        {:doc  "Removes target folder"
                                 :task (fs/delete-tree "target")}
   test_lib_features            (shell "cargo test --all-features --no-fail-fast")
   test_lib_no_default_features (shell "cargo test --features std --no-default-features --no-fail-fast")
-  test-examples                (do (shell "cargo run --example get-nth"))
+  test-examples                (do (shell "cargo test --examples"))
   cargo-test                   {:doc     "Runs all cargo tests"
                                 :depends [test_lib_features test_lib_no_default_features test-examples]}
   cargo-fmt                    {:doc  "Checks cargo fmt"
@@ -17,6 +17,8 @@
                                 :task (shell "cargo clippy --all-features -- --deny warnings")}
   cargo-clippy-no-defaults     {:doc  "Cargo clippy with no default features"
                                 :task (shell "cargo clippy --no-default-features -- --deny warnings")}
+  cargo-clippy-examples        {:doc  "Cargo clippy on examples"
+                                :task (shell "cargo --examples -- --deny warnings -A clippy::unwrap-used")}
   clippy                       {:doc     "Runs all variations of cargo clippy"
                                 :depends [cargo-clippy-all-features cargo-clippy-no-defaults]}
   cov-all-features             {:doc  "Coverage, all features"

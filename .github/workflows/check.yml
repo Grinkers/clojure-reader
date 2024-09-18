@@ -35,7 +35,7 @@ jobs:
         run: |
           cargo test --all-features --no-fail-fast --target ${{ matrix.target }}
           cargo test --features std --no-default-features --no-fail-fast --target ${{ matrix.target }}
-          cargo run --example get-nth --target ${{ matrix.target }}
+          cargo test --examples --target ${{ matrix.target }}
 
   build_linux:
     name: Build Linux
@@ -114,7 +114,7 @@ jobs:
         run: |
           cargo test --all-features --no-fail-fast --target ${{ matrix.target }}
           cargo test --features std --no-default-features --no-fail-fast --target ${{ matrix.target }}
-          cargo run --example get-nth --target ${{ matrix.target }}
+          cargo test --examples --target ${{ matrix.target }}
 
   build_embedded:
     name: Build Embedded
@@ -158,3 +158,4 @@ jobs:
             toolchain: stable minus 2 releases
         - run: cargo clippy --all-features -- --deny warnings
         - run: cargo clippy --no-default-features -- --deny warnings
+        - run: cargo clippy --examples -- --deny warnings -A clippy::unwrap-used
