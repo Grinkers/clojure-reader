@@ -1,7 +1,7 @@
 {:tasks
  {:init                        (do (def code-cov-env
                                      {"CARGO_INCREMENTAL" "0"
-                                      "RUSTFLAGS"         "-Cinstrument-coverage -Copt-level=0 -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off"
+                                      "RUSTFLAGS"         "-Cinstrument-coverage -Copt-level=0 -Ccodegen-units=1 -Cllvm-args=--inline-threshold=0 -Clink-dead-code -Coverflow-checks=off"
                                       "LLVM_PROFILE_FILE" "target/coverage/cargo-test-%p-%m.profraw"}))
   :requires                    ([babashka.fs :as fs])
   clean                        {:doc  "Removes target folder"
@@ -18,9 +18,9 @@
   cargo-clippy-no-defaults     {:doc  "Cargo clippy with no default features"
                                 :task (shell "cargo clippy --no-default-features -- --deny warnings")}
   cargo-clippy-examples        {:doc  "Cargo clippy on examples"
-                                :task (shell "cargo --examples -- --deny warnings -A clippy::unwrap-used")}
+                                :task (shell "cargo clippy --examples -- --deny warnings -A clippy::unwrap-used")}
   clippy                       {:doc     "Runs all variations of cargo clippy"
-                                :depends [cargo-clippy-all-features cargo-clippy-no-defaults]}
+                                :depends [cargo-clippy-all-features cargo-clippy-no-defaults cargo-clippy-examples]}
   cov-all-features             {:doc  "Coverage, all features"
                                 :task (shell {:extra-env code-cov-env} "cargo test --all-features")}
   cov-std-only                 {:doc  "Coverage, std only"
