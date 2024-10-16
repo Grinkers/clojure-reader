@@ -1,4 +1,4 @@
-#![allow(clippy::inline_always)]
+#![expect(clippy::inline_always)]
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
@@ -273,7 +273,7 @@ fn parse_set<'e>(walker: &mut Walker, slice: &'e str) -> Result<Edn<'e>, Error> 
 }
 
 #[inline]
-#[allow(clippy::needless_pass_by_ref_mut)]
+#[expect(clippy::needless_pass_by_ref_mut, reason = "once implemented, walker will need to be mut")]
 fn parse_tag<'e>(walker: &mut Walker) -> Result<Edn<'e>, Error> {
   Err(Error {
     code: Code::Unimplemented("Tagged Element"),
