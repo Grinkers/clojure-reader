@@ -19,7 +19,7 @@ fn wrap_quote(edn: Edn<'_>) -> Edn<'_> {
         }
       }
 
-      return Edn::List(list);
+      Edn::List(list)
     }
     _ => edn,
   }

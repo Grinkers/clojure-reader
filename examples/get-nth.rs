@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use clojure_reader::edn::{self, Edn};
 
-fn maybe_forty_two<'a>(edn: &'a Edn<'a>) -> Option<&Edn<'a>> {
+fn maybe_forty_two<'a>(edn: &'a Edn<'a>) -> Option<&'a Edn<'a>> {
   // This roughly tries to match clojure's get and nth
   // (-> (clojure.edn/read-string "{:foo {猫 {{:foo :bar} [1 2 42 3]}}}")
   //   (get :foo)

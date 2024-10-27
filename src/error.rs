@@ -1,3 +1,4 @@
+use core::error;
 use core::fmt::{self, Debug};
 
 pub struct Error {
@@ -29,6 +30,8 @@ pub enum Code {
   NoFloatFeature,
 }
 
+impl error::Error for Error {}
+
 impl Debug for Error {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(
@@ -36,5 +39,11 @@ impl Debug for Error {
       "EdnError {{ code: {:?}, line: {:?}, column: {:?}, ptr: {:?} }}",
       self.code, self.line, self.column, self.ptr
     )
+  }
+}
+
+impl alloc::fmt::Display for Error {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{self:?}")
   }
 }

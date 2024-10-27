@@ -1,4 +1,4 @@
-#![allow(clippy::inline_always)]
+#![expect(clippy::inline_always)]
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;

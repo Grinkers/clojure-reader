@@ -74,7 +74,7 @@ pub fn read(edn: &str) -> Result<(Edn<'_>, &str), error::Error> {
   Ok((r.0, r.1))
 }
 
-impl<'e> Edn<'e> {
+impl Edn<'_> {
   pub fn get(&self, e: &Self) -> Option<&Self> {
     if let Edn::Map(m) = self {
       let lol = m.get(e);
@@ -105,7 +105,7 @@ const fn char_to_edn(c: char) -> Option<&'static str> {
   }
 }
 
-impl<'e> fmt::Display for Edn<'e> {
+impl fmt::Display for Edn<'_> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       Self::Vector(v) => {
