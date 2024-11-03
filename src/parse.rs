@@ -56,7 +56,7 @@ impl Walker {
   }
 
   #[inline(always)]
-  fn slurp_str<'w>(&mut self, slice: &'w str) -> Result<Edn<'w>, Error> {
+  fn slurp_str<'w>(&mut self, slice: &'w str) -> Result<&'w str, Error> {
     let _ = self.nibble_next(slice); // Consume the leading '"' char
     let starting_ptr = self.ptr;
     let mut escape = false;
@@ -76,9 +76,30 @@ impl Walker {
           }
           escape = false;
         } else if c == '\"' {
-          return Ok(Edn::Str(&slice[starting_ptr..self.ptr - 1]));
+          return Ok(&slice[starting_ptr..self.ptr - 1]);
         } else {
           escape = c == '\\';
+        }
+      } else {
+        return Err(Error {
+          code: Code::UnexpectedEOF,
+          column: Some(self.column),
+          line: Some(self.line),
+          ptr: Some(self.ptr),
+        });
+      }
+    }
+  }
+
+  #[inline(always)]
+  fn slurp_tag<'w>(&mut self, slice: &'w str) -> Result<&'w str, Error> {
+    self.nibble_whitespace(slice);
+    let starting_ptr = self.ptr;
+
+    loop {
+      if let Some(c) = self.nibble_next(slice) {
+        if c == ' ' {
+          return Ok(&slice[starting_ptr..self.ptr - 1]);
         }
       } else {
         return Err(Error {
@@ -160,7 +181,7 @@ fn parse_internal<'e>(walker: &mut Walker, slice: &'e str) -> Result<Option<Edn<
           })
         }
       },
-      '\"' => Some(walker.slurp_str(slice)),
+      '\"' => Some(Ok(Edn::Str(walker.slurp_str(slice)?))),
       // comment. consume until a new line.
       ';' => {
         walker.nibble_newline(slice);
@@ -204,7 +225,7 @@ fn parse_tag_set_discard<'e>(
   match walker.peek_next(slice) {
     Some('{') => parse_set(walker, slice).map(Some),
     Some('_') => parse_discard(walker, slice),
-    _ => parse_tag(walker).map(Some),
+    _ => parse_tag(walker, slice).map(Some),
   }
 }
 
@@ -273,14 +294,11 @@ fn parse_set<'e>(walker: &mut Walker, slice: &'e str) -> Result<Edn<'e>, Error> 
 }
 
 #[inline]
-#[allow(clippy::needless_pass_by_ref_mut)]
-fn parse_tag<'e>(walker: &mut Walker) -> Result<Edn<'e>, Error> {
-  Err(Error {
-    code: Code::Unimplemented("Tagged Element"),
-    line: Some(walker.line),
-    column: Some(walker.column),
-    ptr: Some(walker.ptr),
-  })
+fn parse_tag<'e>(walker: &mut Walker, slice: &'e str) -> Result<Edn<'e>, Error> {
+  let tag = walker.slurp_tag(slice)?;
+  walker.nibble_whitespace(slice);
+  let val = walker.slurp_str(slice)?;
+  Ok(Edn::Tagged(tag, val))
 }
 
 #[inline]

@@ -1,5 +1,4 @@
 use core::fmt::{self, Debug};
-use core::str;
 
 pub struct Error {
   /// Error code. This is `non_exhaustive`.
@@ -28,9 +27,6 @@ pub enum Code {
 
   /// Feature errors
   NoFloatFeature,
-
-  /// An alternate to panics/todo
-  Unimplemented(&'static str),
 }
 
 impl Debug for Error {

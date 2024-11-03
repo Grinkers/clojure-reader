@@ -23,14 +23,6 @@ mod test {
   }
 
   #[test]
-  fn unimplemented() {
-    assert_eq!(
-            err_as_string("#inst \"1985-04-12T23:20:50.52Z\""),
-            "EdnError { code: Unimplemented(\"Tagged Element\"), line: Some(1), column: Some(2), ptr: Some(1) }"
-        );
-  }
-
-  #[test]
   fn unbalanced_forms() {
     assert_eq!(
       err_as_string("(car (cdr) cdrrdrdrr (so (many (parens ())))"),
@@ -40,6 +32,11 @@ mod test {
     assert_eq!(
       err_as_string("{:foo 42 :bar)"),
       "EdnError { code: UnmatchedDelimiter(')'), line: Some(1), column: Some(14), ptr: Some(13) }"
+    );
+
+    assert_eq!(
+      err_as_string("#inst"),
+      "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(6), ptr: Some(5) }"
     );
   }
 

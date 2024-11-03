@@ -31,6 +31,7 @@ pub enum Edn<'e> {
   Symbol(&'e str),
   Str(&'e str),
   Int(i64),
+  Tagged(&'e str, &'e str),
   #[cfg(feature = "floats")]
   Double(OrderedFloat<f64>),
   Rational((i64, i64)),
@@ -156,6 +157,7 @@ impl<'e> fmt::Display for Edn<'e> {
         write!(f, ")")
       }
       Self::Symbol(sy) => write!(f, "{sy}"),
+      Self::Tagged(t, s) => write!(f, "#{t} \"{s}\""),
       Self::Key(k) => write!(f, "{k}"),
       Self::Str(s) => write!(f, "\"{s}\""),
       Self::Int(i) => write!(f, "{i}"),

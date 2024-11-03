@@ -229,4 +229,12 @@ mod test {
     // EOF error
     assert!(edn::read(s).is_err());
   }
+
+  #[test]
+  fn tagged() {
+    assert_eq!(
+      edn::read_string("#inst \"1985-04-12T23:20:50.52Z\"").unwrap(),
+      Edn::Tagged("inst", "1985-04-12T23:20:50.52Z")
+    );
+  }
 }
