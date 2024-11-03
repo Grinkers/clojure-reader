@@ -89,6 +89,14 @@ mod test {
   #[test]
   fn numbers() {
     assert_eq!(edn::read_string("43/5143").unwrap(), Edn::Rational((43, 5143)));
+    assert_eq!(
+      edn::read_string("-1190128294822145183/3023870813131455535").unwrap(),
+      Edn::Rational((-1190128294822145183, 3023870813131455535))
+    );
+    assert_eq!(
+      edn::read_string("-2477641376863858799/-8976013293400652448").unwrap(),
+      Edn::Rational((-2477641376863858799, -8976013293400652448))
+    );
   }
 
   #[test]

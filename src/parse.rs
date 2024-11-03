@@ -475,7 +475,7 @@ fn parse_number(lit: &str) -> Result<Edn<'_>, Code> {
   if let Ok(n) = number.parse::<f64>() {
     return Ok(Edn::Double((n * f64::from(polarity)).into()));
   }
-  if let Some((n, d)) = num_den_from_slice(number) {
+  if let Some((n, d)) = num_den_from_slice(number, polarity) {
     return Ok(Edn::Rational((n, d)));
   }
 
@@ -483,16 +483,16 @@ fn parse_number(lit: &str) -> Result<Edn<'_>, Code> {
 }
 
 #[inline]
-fn num_den_from_slice(slice: &str) -> Option<(i64, i64)> {
+fn num_den_from_slice(slice: &str, polarity: i8) -> Option<(i64, i64)> {
   let index = slice.find('/');
 
   if let Some(i) = index {
-    let (num, den) = slice.split_at(i); // This can't panic because the index is valid
+    let (num, den) = slice.split_at(i);
     let num = num.parse::<i64>();
     let den = den[1..].parse::<i64>();
 
     if let (Ok(n), Ok(d)) = (num, den) {
-      return Some((n, d));
+      return Some((n * i64::from(polarity), d));
     }
   }
   None
