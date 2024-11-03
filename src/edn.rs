@@ -11,6 +11,10 @@ use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 use core::fmt;
 
+#[cfg(feature = "arbitrary-nums")]
+use bigdecimal::BigDecimal;
+#[cfg(feature = "arbitrary-nums")]
+use num_bigint::BigInt;
 #[cfg(feature = "floats")]
 use ordered_float::OrderedFloat;
 
@@ -30,6 +34,10 @@ pub enum Edn<'e> {
   #[cfg(feature = "floats")]
   Double(OrderedFloat<f64>),
   Rational((i64, i64)),
+  #[cfg(feature = "arbitrary-nums")]
+  BigInt(BigInt),
+  #[cfg(feature = "arbitrary-nums")]
+  BigDec(BigDecimal),
   Char(char),
   Bool(bool),
   Nil,
@@ -153,6 +161,10 @@ impl<'e> fmt::Display for Edn<'e> {
       Self::Int(i) => write!(f, "{i}"),
       #[cfg(feature = "floats")]
       Self::Double(d) => write!(f, "{d}"),
+      #[cfg(feature = "arbitrary-nums")]
+      Self::BigInt(bi) => write!(f, "{bi}N"),
+      #[cfg(feature = "arbitrary-nums")]
+      Self::BigDec(bd) => write!(f, "{bd}M"),
       Self::Rational((n, d)) => write!(f, "{n}/{d}"),
       Self::Bool(b) => write!(f, "{b}"),
       Self::Char(c) => {

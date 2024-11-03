@@ -471,15 +471,42 @@ fn parse_number(lit: &str) -> Result<Edn<'_>, Code> {
   if let Ok(n) = i64::from_str_radix(number, radix.into()) {
     return Ok(Edn::Int(n * i64::from(polarity)));
   }
-  #[cfg(feature = "floats")]
-  if let Ok(n) = number.parse::<f64>() {
-    return Ok(Edn::Double((n * f64::from(polarity)).into()));
-  }
   if let Some((n, d)) = num_den_from_slice(number, polarity) {
     return Ok(Edn::Rational((n, d)));
   }
 
+  #[cfg(feature = "arbitrary-nums")]
+  if let Some(n) = big_int_from_slice(number, radix, polarity) {
+    return Ok(Edn::BigInt(n));
+  }
+  #[cfg(feature = "floats")]
+  if let Ok(n) = number.parse::<f64>() {
+    return Ok(Edn::Double((n * f64::from(polarity)).into()));
+  }
+  #[cfg(feature = "arbitrary-nums")]
+  if let Some(n) = big_dec_from_slice(number, radix, polarity) {
+    return Ok(Edn::BigDec(n));
+  }
+
   Err(Code::InvalidNumber)
+}
+
+#[inline]
+#[cfg(feature = "arbitrary-nums")]
+fn big_int_from_slice(slice: &str, radix: u8, polarity: i8) -> Option<num_bigint::BigInt> {
+  // strip ending N, if it exists
+  let slice = slice.strip_suffix('N').map_or(slice, |slice| slice);
+  let num = num_bigint::BigInt::parse_bytes(slice.as_bytes(), radix.into())?;
+  Some(num * polarity)
+}
+
+#[inline]
+#[cfg(feature = "arbitrary-nums")]
+fn big_dec_from_slice(slice: &str, radix: u8, polarity: i8) -> Option<bigdecimal::BigDecimal> {
+  // strip ending M, if it exists
+  let slice = slice.strip_suffix('M').map_or(slice, |slice| slice);
+  let num = bigdecimal::BigDecimal::parse_bytes(slice.as_bytes(), radix.into())?;
+  Some(num * polarity)
 }
 
 #[inline]

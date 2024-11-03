@@ -22,6 +22,17 @@
 
    Pulls in the dependency `ordered-float` for Edn::Double. Without this feature, parsing floating-point numbers will result in an Err.
 
+# Optional Features
+
+   The following features are not enabled by default. To enable them all, use with
+   ```toml
+    clojure-reader  = { features = ["full"] }
+   ```
+
+## arbitrary-nums
+
+   Enables parsing of arbitrary length/precision Ints and Decimals. Relies on `bigdecimal` and `num-bigint` crates.
+
 # no_std
 
    See the [pico example](examples/pico) for a minimalistic example of using this crate with the raspberry pi pico (rp2040)
