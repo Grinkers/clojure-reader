@@ -1,0 +1,15 @@
+{:tasks
+ {:requires ([babashka.fs :as fs])
+  clean-rs  {:doc  "Removes the rust target directory"
+             :task (fs/delete-tree "libclojure-reader/target")}
+  clean-clj {:doc  "Removes the clojure target directory"
+             :task (fs/delete-tree "target")}
+  clean     {:doc     "Removes all target directories"
+             :depends [clean-rs clean-clj]}
+  build-rs  {:doc  "Builds the libclojure-reader.so and copies it to resources"
+             :task (do (shell {:dir "libclojure-reader"} "cargo build --release")
+                       (when-not (fs/directory? "resources") (fs/create-dir "resources"))
+                       (fs/copy "libclojure-reader/target/release/libclojure_reader.so" "resources" {:replace-existing true}))}
+  run-dev   {:doc     "Rebuilds libclojure-reader, then runs the fuzzer with lein."
+             :depends [build-rs]
+             :task    (shell "lein run")}}}
