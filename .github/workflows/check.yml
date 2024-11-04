@@ -124,7 +124,7 @@ jobs:
         target:
           - "thumbv6m-none-eabi"
     env:
-      RUSTFLAGS: "-D warnings"
+      RUSTFLAGS: "-D warnings --cfg portable_atomic_unsafe_assume_single_core"
       RUSTDOCFLAGS: "-D warnings"
     steps:
       - uses: actions/checkout@v4
@@ -133,9 +133,11 @@ jobs:
           targets: ${{ matrix.target }}
           toolchain: stable minus 2 releases
       - name: no_std_release_build_sets
-        run: cargo build --release --no-default-features --features floats --target ${{ matrix.target }}
+        run: cargo build --no-default-features --features floats --target ${{ matrix.target }}
       - name: no_std_release_build
-        run: cargo build --release --no-default-features --target ${{ matrix.target }}
+        run: cargo build --no-default-features --target ${{ matrix.target }}
+      - name: pico-edn example
+        run: cargo build --manifest-path examples/pico/pico-edn/Cargo.toml --target ${{ matrix.target }}
 
   fmt:
       runs-on: ubuntu-latest
