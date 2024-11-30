@@ -1,5 +1,6 @@
 #![expect(clippy::inline_always)]
 
+use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 use core::primitive::str;
@@ -297,8 +298,17 @@ fn parse_set<'e>(walker: &mut Walker, slice: &'e str) -> Result<Edn<'e>, Error> 
 fn parse_tag<'e>(walker: &mut Walker, slice: &'e str) -> Result<Edn<'e>, Error> {
   let tag = walker.slurp_tag(slice)?;
   walker.nibble_whitespace(slice);
-  let val = walker.slurp_str(slice)?;
-  Ok(Edn::Tagged(tag, val))
+  let val = parse_internal(walker, slice)?;
+  if let Some(v) = val {
+    return Ok(Edn::Tagged(tag, Box::new(v)));
+  }
+
+  Err(Error {
+    code: Code::UnexpectedEOF,
+    line: Some(walker.line),
+    column: Some(walker.column),
+    ptr: Some(walker.ptr),
+  })
 }
 
 #[inline]

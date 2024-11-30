@@ -5,8 +5,8 @@
 //!
 //! ## Differences from Clojure
 //! -  Escape characters are not escaped.
-//! -  Tags are current unimplemented.
 
+use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 use core::fmt;
@@ -31,7 +31,7 @@ pub enum Edn<'e> {
   Symbol(&'e str),
   Str(&'e str),
   Int(i64),
-  Tagged(&'e str, &'e str),
+  Tagged(&'e str, Box<Edn<'e>>),
   #[cfg(feature = "floats")]
   Double(OrderedFloat<f64>),
   Rational((i64, i64)),
@@ -157,7 +157,7 @@ impl fmt::Display for Edn<'_> {
         write!(f, ")")
       }
       Self::Symbol(sy) => write!(f, "{sy}"),
-      Self::Tagged(t, s) => write!(f, "#{t} \"{s}\""),
+      Self::Tagged(t, s) => write!(f, "#{t} {s}"),
       Self::Key(k) => write!(f, "{k}"),
       Self::Str(s) => write!(f, "\"{s}\""),
       Self::Int(i) => write!(f, "{i}"),

@@ -234,7 +234,8 @@ mod test {
   fn tagged() {
     assert_eq!(
       edn::read_string("#inst \"1985-04-12T23:20:50.52Z\"").unwrap(),
-      Edn::Tagged("inst", "1985-04-12T23:20:50.52Z")
+      Edn::Tagged("inst", Box::new(Edn::Str("1985-04-12T23:20:50.52Z")))
     );
+    assert_eq!(edn::read_string(r#"#Unit nil"#).unwrap(), Edn::Tagged("Unit", Box::new(Edn::Nil)));
   }
 }
