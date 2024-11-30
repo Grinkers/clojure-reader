@@ -431,7 +431,7 @@ fn edn_literal(literal: &str) -> Result<Option<Edn<'_>>, Code> {
       if k.len() <= 1 {
         return Err(Code::InvalidKeyword);
       }
-      Some(Edn::Key(k))
+      Some(Edn::Key(&k[1..]))
     }
     n if numeric(n) => return Ok(Some(parse_number(n)?)),
     _ => Some(Edn::Symbol(literal)),

@@ -36,11 +36,11 @@ mod test {
     assert_eq!(
       edn::read_string(e).unwrap(),
       Edn::Map(BTreeMap::from([
-        (Edn::Key(":cat"), Edn::Str("猫")),
-        (Edn::Key(":num"), Edn::Int(-36930)),
-        (Edn::Map(BTreeMap::from([(Edn::Key(":foo"), Edn::Str("bar"))])), Edn::Str("foobar")),
-        (Edn::Key(":r"), Edn::Rational((42, 4242))),
-        (Edn::Key(":lisp"), Edn::List(vec![Edn::List(vec![])])),
+        (Edn::Key("cat"), Edn::Str("猫")),
+        (Edn::Key("num"), Edn::Int(-36930)),
+        (Edn::Map(BTreeMap::from([(Edn::Key("foo"), Edn::Str("bar"))])), Edn::Str("foobar")),
+        (Edn::Key("r"), Edn::Rational((42, 4242))),
+        (Edn::Key("lisp"), Edn::List(vec![Edn::List(vec![])])),
       ]))
     );
   }
@@ -48,8 +48,8 @@ mod test {
   #[test]
   fn whitespace() {
     let expected_result = Edn::Map(BTreeMap::from([(
-      Edn::Key(":somevec"),
-      Edn::Vector(vec![Edn::Map(BTreeMap::from([(Edn::Key(":value"), Edn::Int(42))]))]),
+      Edn::Key("somevec"),
+      Edn::Vector(vec![Edn::Map(BTreeMap::from([(Edn::Key("value"), Edn::Int(42))]))]),
     )]));
 
     let e = "{:somevec
@@ -76,10 +76,10 @@ mod test {
     assert_eq!(
       edn::read_string(e).unwrap(),
       Edn::Set(BTreeSet::from([
-        Edn::Key(":cat"),
+        Edn::Key("cat"),
         Edn::Int(1),
         Edn::Bool(true),
-        Edn::Set(BTreeSet::from([Edn::Key(":cat"), Edn::Bool(true)])),
+        Edn::Set(BTreeSet::from([Edn::Key("cat"), Edn::Bool(true)])),
         Edn::Int(2),
         (Edn::Vector(vec![Edn::Int(42)])),
       ]))

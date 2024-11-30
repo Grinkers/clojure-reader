@@ -77,8 +77,7 @@ pub fn read(edn: &str) -> Result<(Edn<'_>, &str), error::Error> {
 impl Edn<'_> {
   pub fn get(&self, e: &Self) -> Option<&Self> {
     if let Edn::Map(m) = self {
-      let lol = m.get(e);
-      if let Some(l) = lol {
+      if let Some(l) = m.get(e) {
         return Some(l);
       };
     }
@@ -158,7 +157,7 @@ impl fmt::Display for Edn<'_> {
       }
       Self::Symbol(sy) => write!(f, "{sy}"),
       Self::Tagged(t, s) => write!(f, "#{t} {s}"),
-      Self::Key(k) => write!(f, "{k}"),
+      Self::Key(k) => write!(f, ":{k}"),
       Self::Str(s) => write!(f, "\"{s}\""),
       Self::Int(i) => write!(f, "{i}"),
       #[cfg(feature = "floats")]

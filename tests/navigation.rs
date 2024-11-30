@@ -6,8 +6,8 @@ mod test {
   fn get() {
     let e = edn::read_string("{:foo 4 :bar 2}").unwrap();
 
-    assert_eq!(e.get(&Edn::Key(":foo")), Some(&Edn::Int(4)));
-    assert_eq!(e.get(&Edn::Str(":foo")), None);
+    assert_eq!(e.get(&Edn::Key("foo")), Some(&Edn::Int(4)));
+    assert_eq!(e.get(&Edn::Str("foo")), None);
     assert_eq!(e.get(&Edn::Symbol(":foo")), None);
     assert_eq!(e.nth(0), None);
   }

@@ -10,9 +10,9 @@ fn maybe_forty_two<'a>(edn: &'a Edn<'a>) -> Option<&'a Edn<'a>> {
   //   (get {:foo :bar})
   //   (nth 2))
   edn
-    .get(&Edn::Key(":foo"))?
+    .get(&Edn::Key("foo"))?
     .get(&Edn::Symbol("猫"))?
-    .get(&Edn::Map(BTreeMap::from([(Edn::Key(":foo"), Edn::Key(":bar"))])))?
+    .get(&Edn::Map(BTreeMap::from([(Edn::Key("foo"), Edn::Key("bar"))])))?
     .nth(2)
 }
 
