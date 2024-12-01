@@ -26,15 +26,21 @@ unwrap_used = "warn"
 
 [features]
 arbitrary-nums = ["bigdecimal", "num-bigint"]
-default = ["floats", "std"]
+default = ["floats", "std" ]
 floats = ["ordered-float"]
-full = ["default", "arbitrary-nums"]
+full = ["default", "arbitrary-nums", "derive"]
+derive = ["serde"]
 std = []
 
 [dependencies]
 bigdecimal = { version = "0.4.6", default-features = false, optional = true }
 num-bigint = { version = "0.4.6", default-features = false, optional = true }
 ordered-float = { version = "4.2", default-features = false, optional = true }
+serde = { version = "^1.0", features = ["alloc"], default-features = false, optional = true }
+
+[dev-dependencies]
+serde_derive = "^1.0"
 
 [[example]]
-name = "get-nth"
+name = "serde"
+required-features = ["derive"]

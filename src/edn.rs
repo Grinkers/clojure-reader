@@ -94,7 +94,7 @@ impl Edn<'_> {
   }
 }
 
-const fn char_to_edn(c: char) -> Option<&'static str> {
+pub(crate) const fn char_to_edn(c: char) -> Option<&'static str> {
   match c {
     '\n' => Some("newline"),
     '\r' => Some("return"),

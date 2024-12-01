@@ -72,6 +72,7 @@ jobs:
         run: |
           cargo build --all-features --target ${{ matrix.target }}
           cargo build --features std --no-default-features
+          cargo build --features std,derive --no-default-features
           cargo build --no-default-features
 
   build_windows:

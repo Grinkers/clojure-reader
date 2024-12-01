@@ -29,6 +29,21 @@
     clojure-reader  = { features = ["full"] }
    ```
 
+## derive
+
+   Enables implementation for [serde's](https://serde.rs/) Serialize and Deserialize traits for convenient to/from rust structures.
+
+   See [`serde example`](examples/serde.rs) for tips/tricks (eg you'll probably want `kebab-case`).
+
+   Note that EDN is more generic than rust, so this feature will silently pass over things that rust and serde cannot handle. For example
+   ```clojure
+   {:foo 42, 42 "bar"}
+   ```
+   will pass over the k/v pair `(42 "bar")` and transform `:foo` to `foo`.
+
+   If you need complete control, it is recommended to use the base `read` and `read_string`.
+   See [`get-nth example`](examples/get-nth.rs) for clojure-like navigation.
+
 ## arbitrary-nums
 
    Enables parsing of arbitrary length/precision Ints and Decimals. Relies on `bigdecimal` and `num-bigint` crates.

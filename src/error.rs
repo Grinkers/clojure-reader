@@ -1,6 +1,8 @@
 use core::error;
 use core::fmt::{self, Debug};
 
+pub type Result<T> = core::result::Result<T, Error>;
+
 pub struct Error {
   /// Error code. This is `non_exhaustive`.
   pub code: Code,
@@ -28,6 +30,10 @@ pub enum Code {
 
   /// Feature errors
   NoFloatFeature,
+
+  /// Serde
+  #[cfg(feature = "serde")]
+  Serde(alloc::string::String),
 }
 
 impl error::Error for Error {}
