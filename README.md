@@ -26,7 +26,7 @@
 
    The following features are not enabled by default. To enable them all, use with
    ```toml
-    clojure-reader  = { features = ["full"] }
+   clojure-reader = { features = ["full"] }
    ```
 
 ## derive

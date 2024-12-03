@@ -7,8 +7,11 @@ authors = ["Kevin Nakamura <grinkers@grinkers.net>"]
 description = "A Clojure reader"
 readme = "README.md"
 repository = "https://github.com/grinkers/clojure-reader"
-keywords = ["EDN", "no_std", "clojure"]
+keywords = ["EDN", "no_std", "clojure", "serde" ]
 license = "Zlib"
+
+[package.metadata.docs.rs]
+all-features = true
 
 [lints.rust]
 rust_2018_idioms = { level = "warn", priority = -1 }

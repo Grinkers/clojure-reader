@@ -1,7 +1,6 @@
 //! A Clojure reader in Rust.
 //!
-//! This crate tries to match the behavior of Clojure's `tools.reader` as much as possible. EDN is
-//! almost complete.
+//! This crate tries to match the behavior of Clojure's `tools.reader` as much as possible.
 #![no_std]
 
 extern crate alloc;
