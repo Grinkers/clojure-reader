@@ -1,0 +1,25 @@
+name: Publish after Release
+
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  run_after_release:
+    name: crates.io publish
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-D warnings"
+      RUSTDOCFLAGS: "-D warnings"
+    steps:
+      - name: Update sources
+        run: sudo apt update
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable minus 2 releases
+      - name: cargo publish
+        run: |
+          cargo login ${{ secrets.CRATES_IO_API_TOKEN }}
+          cargo publish --no-verify
