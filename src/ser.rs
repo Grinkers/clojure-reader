@@ -10,14 +10,12 @@ pub struct Serializer {
   output: String,
 }
 
-// grcov-excl-start: Serialization should be infallible, so this can't be tested
 impl ser::Error for Error {
   #[cold]
   fn custom<T: Display>(msg: T) -> Self {
     Self { code: Code::Serde(msg.to_string()), line: None, column: None, ptr: None }
   }
 }
-// grcov-excl-stop
 
 /// Serializer for creating an EDN formatted String
 ///
@@ -112,7 +110,6 @@ impl ser::Serializer for &mut Serializer {
     Ok(())
   }
 
-  // grcov-excl-start:
   // as of 2024-11, this is not called by serde
   // https://serde.rs/impl-serialize.html
   fn serialize_bytes(self, v: &[u8]) -> Result<()> {
@@ -124,7 +121,6 @@ impl ser::Serializer for &mut Serializer {
     }
     seq.end()
   }
-  // grcov-excl-stop
 
   fn serialize_none(self) -> Result<()> {
     self.serialize_unit()
