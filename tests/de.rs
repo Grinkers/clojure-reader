@@ -70,14 +70,51 @@ mod test {
   }
 
   #[test]
+  fn unit_struct() {
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct Unit;
+    assert_eq!(Unit {}, from_str::<Unit>("").unwrap());
+    assert_eq!(Unit {}, from_str::<Unit>("{}").unwrap());
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct UnitNone {
+      unit: Unit,
+      nothing: Option<()>,
+    }
+    assert_eq!(
+      UnitNone { unit: Unit, nothing: None },
+      from_str::<UnitNone>(r#"{"unit" {} "nothing" nil}"#).unwrap()
+    );
+  }
+
+  #[test]
+  fn new_type() {
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct Meters(i64);
+
+    assert_eq!(Meters(420), from_str(r#"420"#).unwrap());
+  }
+
+  #[test]
+  fn tuple_struct() {
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct Test {
+      int: (u32, i64),
+    }
+
+    assert_eq!(Test { int: (42, -420) }, from_str(r#"{"int" (42 -420)}"#).unwrap());
+  }
+
+  #[test]
   fn test_simple_struct() {
     #[derive(Deserialize, PartialEq, Debug)]
     struct Test {
       int: u32,
+      c: char,
     }
 
-    assert_eq!(Test { int: 42 }, from_str(r#"{"int" 42}"#).unwrap());
-    assert_eq!(Test { int: 42 }, from_str(r#"{:int 42}"#).unwrap());
+    assert_eq!(Test { int: 42, c: 'c' }, from_str(r#"{"int" 42 :c \c}"#).unwrap());
+    assert_eq!(Test { int: 42, c: 'n' }, from_str(r#"{:int 42 "c" \n}"#).unwrap());
   }
 
   #[test]
@@ -158,6 +195,21 @@ mod test {
     assert_eq!(E::Tuple(1, 2), from_str::<E>(r#"#E/Tuple [1 2]"#).unwrap());
     assert_eq!(E::Struct { a: 1, b: 42 }, from_str::<E>(r#"#E/Struct {:a 1, :b 42}"#,).unwrap());
 
-    assert_eq!("Err(EdnError { code: Serde(\"namespace in B/Unit can't be matched to E\"), line: None, column: None, ptr: None })", format!("{:?}", from_str::<E>(r#"#B/Unit sillycat"#)));
+    assert_eq!(format!("{:?}", from_str::<E>(r#"#B/Unit sillycat"#)), "Err(EdnError { code: Serde(\"namespace in B/Unit can't be matched to E\"), line: None, column: None, ptr: None })");
+    assert_eq!(format!("{:?}", from_str::<E>(r#""#)), "Err(EdnError { code: Serde(\"can't convert Nil into Tagged for enum\"), line: None, column: None, ptr: None })");
+    assert_eq!(format!("{:?}", from_str::<E>(r#"#BUnit sillycat"#)), "Err(EdnError { code: Serde(\"Expected namespace in BUnit for Tagged for enum\"), line: None, column: None, ptr: None })");
+  }
+
+  #[test]
+  fn serde_errors() {
+    assert_eq!(format!("{:?}", from_str::<String>(r#"#E/Tuple [4/2]"#)),
+               "Err(EdnError { code: Serde(\"Don't know how to convert Tagged(\\\"E/Tuple\\\", Vector([Rational((4, 2))])) into any\"), line: None, column: None, ptr: None })");
+
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct SomeBytes<'a> {
+      data: &'a [u8],
+    }
+    assert_eq!(format!("{:?}", from_str::<SomeBytes<'_>>(r#"[4/2]"#)),
+               "Err(EdnError { code: Serde(\"deserialize_bytes is unimplemented/unused\"), line: None, column: None, ptr: None })");
   }
 }

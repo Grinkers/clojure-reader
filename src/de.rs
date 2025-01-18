@@ -58,19 +58,29 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
       Edn::Char(c) => visitor.visit_char(c),
       Edn::Bool(b) => visitor.visit_bool(b),
       Edn::Nil => visitor.visit_unit(),
-      Edn::Vector(vec) => visitor.visit_seq(SeqEdn::new(vec)),
-      Edn::Map(mut map) => visitor.visit_map(MapEdn::new(&mut map)),
-      Edn::List(list) => visitor.visit_seq(SeqEdn::new(list)),
-      Edn::Set(set) => {
-        let list = set.iter().cloned().collect();
-        visitor.visit_seq(SeqEdn::new(list))
+      Edn::Vector(mut list) | Edn::List(mut list) => {
+        list.reverse();
+        Ok(visitor.visit_seq(SeqEdn::new(list))?)
       }
+      Edn::Map(mut map) => {
+        if map == BTreeMap::new() {
+          visitor.visit_unit()
+        } else {
+          visitor.visit_map(MapEdn::new(&mut map))
+        }
+      }
+      Edn::Set(set) => {
+        let mut s: Vec<Edn<'_>> = set.into_iter().collect();
+        s.reverse();
+        Ok(visitor.visit_seq(SeqEdn::new(s))?)
+      }
+      // Things like rational numbers and custom tags can't be represented in rust types
       _ => Err(de::Error::custom(format!("Don't know how to convert {self:?} into any"))),
     }
   }
 
   forward_to_deserialize_any! {
-    bool f64 char str unit
+    bool i64 f64 char str unit map ignored_any seq tuple_struct
   }
 
   fn deserialize_i8<V>(self, visitor: V) -> Result<V::Value>
@@ -104,13 +114,6 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
       |_| Err(de::Error::custom(format!("can't convert {int:?} into i32"))),
       |i| visitor.visit_i32(i),
     )
-  }
-
-  fn deserialize_i64<V>(self, visitor: V) -> Result<V::Value>
-  where
-    V: Visitor<'de>,
-  {
-    visitor.visit_i64(get_int_from_edn(&self)?)
   }
 
   fn deserialize_u8<V>(self, visitor: V) -> Result<V::Value>
@@ -216,51 +219,11 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
     visitor.visit_newtype_struct(self)
   }
 
-  fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value>
-  where
-    V: Visitor<'de>,
-  {
-    match self {
-      Edn::List(mut l) | Edn::Vector(mut l) => {
-        l.reverse();
-        Ok(visitor.visit_seq(SeqEdn::new(l))?)
-      }
-      Edn::Set(s) => {
-        let mut s: Vec<Edn<'_>> = s.into_iter().collect();
-        s.reverse();
-        Ok(visitor.visit_seq(SeqEdn::new(s))?)
-      }
-      _ => Err(de::Error::custom(format!("can't convert {self:?} into seq"))),
-    }
-  }
-
   fn deserialize_tuple<V>(self, _len: usize, visitor: V) -> Result<V::Value>
   where
     V: Visitor<'de>,
   {
     self.deserialize_seq(visitor)
-  }
-
-  fn deserialize_tuple_struct<V>(
-    self,
-    _name: &'static str,
-    _len: usize,
-    visitor: V,
-  ) -> Result<V::Value>
-  where
-    V: Visitor<'de>,
-  {
-    self.deserialize_seq(visitor)
-  }
-
-  fn deserialize_map<V>(self, visitor: V) -> Result<V::Value>
-  where
-    V: Visitor<'de>,
-  {
-    match self {
-      Edn::Map(mut m) => Ok(visitor.visit_map(MapEdn::new(&mut m))?),
-      _ => Err(de::Error::custom(format!("can't convert {self:?} into map"))),
-    }
   }
 
   fn deserialize_struct<V>(
@@ -305,13 +268,6 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
     V: Visitor<'de>,
   {
     self.deserialize_str(visitor)
-  }
-
-  fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value>
-  where
-    V: Visitor<'de>,
-  {
-    self.deserialize_any(visitor)
   }
 }
 
