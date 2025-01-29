@@ -1,19 +1,23 @@
 use clojure_reader::edn::{self, Edn};
 
-// Recursively traverse the Edn struct.
-// To keep this example short, this only handles lists and literals.
+// Recursively traverse the Edn struct and wrap quote around all quoted items.
 fn wrap_quote(edn: Edn<'_>) -> Edn<'_> {
   match edn {
-    Edn::Symbol(s) => s.strip_prefix('\'').map_or(Edn::Symbol(s), |stripped| {
-      Edn::List(vec![Edn::Symbol("quote"), Edn::Symbol(stripped)])
-    }),
-    Edn::List(mut edn) => {
-      edn.reverse();
+    Edn::Symbol(sym) => sym.strip_prefix('\'').map_or_else(
+      || edn::read_string(sym).unwrap(),
+      |strip| Edn::List(vec![Edn::Symbol("quote"), edn::read_string(strip).unwrap()]),
+    ),
+    Edn::List(edn) => {
       let mut list = vec![];
+      let mut edn = edn.into_iter();
 
-      while let Some(e) = edn.pop() {
+      while let Some(e) = edn.next() {
         if e == Edn::Symbol("'") {
-          list.push(Edn::List(vec![Edn::Symbol("quote"), wrap_quote(edn.pop().unwrap())]));
+          if let Some(e) = edn.next() {
+            list.push(Edn::List(vec![Edn::Symbol("quote"), wrap_quote(e)]));
+          } else {
+            list.push(Edn::Symbol("quote"));
+          }
         } else {
           list.push(wrap_quote(e));
         }
