@@ -30,6 +30,11 @@ jobs:
         with:
           command: llvm-cov
           args: --no-report --all-features --no-fail-fast
+      - name: Run examples with code coverage
+        uses: actions-rs/cargo@v1
+        with:
+          command: llvm-cov
+          args: --no-report --examples
       - name: Generate Report
         uses: actions-rs/cargo@v1
         with:
