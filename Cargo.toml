@@ -38,7 +38,7 @@ std = []
 [dependencies]
 bigdecimal = { version = "0.4.6", default-features = false, optional = true }
 num-bigint = { version = "0.4.6", default-features = false, optional = true }
-ordered-float = { version = "4.2", default-features = false, optional = true }
+ordered-float = { version = "5.0", default-features = false, optional = true }
 serde = { version = "^1.0", features = ["alloc"], default-features = false, optional = true }
 
 [dev-dependencies]
