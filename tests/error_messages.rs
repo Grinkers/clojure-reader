@@ -61,7 +61,7 @@ fn parse_invalid_ints() {
 #[test]
 fn parse_tag_no_end() {
   assert_eq!(
-    err_as_string(r#"#Unit"#),
+    err_as_string(r"#Unit"),
     "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(6), ptr: Some(5) }"
   );
   assert_eq!(
@@ -69,7 +69,7 @@ fn parse_tag_no_end() {
     "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(24), ptr: Some(23) }"
   );
   assert_eq!(
-    err_as_string(r#"#Unit ;"#),
+    err_as_string(r"#Unit ;"),
     "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(7), ptr: Some(7) }"
   );
 }

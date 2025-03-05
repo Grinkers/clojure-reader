@@ -72,7 +72,7 @@ impl Walker {
                 column: Some(self.column),
                 line: Some(self.line),
                 ptr: Some(self.ptr),
-              })
+              });
             }
           }
           escape = false;
@@ -179,7 +179,7 @@ fn parse_internal<'e>(walker: &mut Walker, slice: &'e str) -> Result<Option<Edn<
             line: Some(walker.line),
             column: Some(column_start),
             ptr: Some(walker.ptr),
-          })
+          });
         }
       },
       '\"' => Some(Ok(Edn::Str(walker.slurp_str(slice)?))),
@@ -206,7 +206,7 @@ fn parse_internal<'e>(walker: &mut Walker, slice: &'e str) -> Result<Option<Edn<
             line: Some(line_start),
             column: Some(column_start),
             ptr: Some(ptr_start),
-          })
+          });
         }
       },
     } {
@@ -240,7 +240,7 @@ fn parse_discard<'e>(walker: &mut Walker, slice: &'e str) -> Result<Option<Edn<'
         line: Some(walker.line),
         column: Some(walker.column),
         ptr: Some(walker.ptr),
-      })
+      });
     }
     _ => match walker.peek_next(slice) {
       Some(_) => parse_internal(walker, slice)?,
@@ -288,7 +288,7 @@ fn parse_set<'e>(walker: &mut Walker, slice: &'e str) -> Result<Edn<'e>, Error> 
           line: Some(walker.line),
           column: Some(walker.column),
           ptr: Some(walker.ptr),
-        })
+        });
       }
     }
   }
@@ -354,7 +354,7 @@ fn parse_map<'e>(walker: &mut Walker, slice: &'e str) -> Result<Edn<'e>, Error> 
           line: Some(walker.line),
           column: Some(walker.column),
           ptr: Some(walker.ptr),
-        })
+        });
       }
     }
   }
@@ -392,7 +392,7 @@ fn parse_vector<'e>(walker: &mut Walker, slice: &'e str, delim: char) -> Result<
           line: Some(walker.line),
           column: Some(walker.column),
           ptr: Some(walker.ptr),
-        })
+        });
       }
     }
   }
