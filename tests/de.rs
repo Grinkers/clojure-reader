@@ -1,12 +1,9 @@
-#[cfg(test)]
 #[cfg(feature = "serde")]
 mod test {
   extern crate alloc;
 
   use alloc::borrow::ToOwned;
-  use alloc::string::String;
-  use alloc::string::ToString;
-  use alloc::vec;
+  use alloc::string::{String, ToString};
   use alloc::vec::Vec;
 
   use clojure_reader::de::from_str;

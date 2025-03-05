@@ -1,4 +1,3 @@
-#[cfg(test)]
 #[cfg(feature = "arbitrary-nums")]
 mod test {
   extern crate alloc;

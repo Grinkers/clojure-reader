@@ -1,4 +1,3 @@
-#[cfg(test)]
 #[cfg(feature = "floats")]
 mod test {
   extern crate alloc;
