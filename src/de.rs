@@ -9,7 +9,7 @@ use crate::edn::{self, Edn};
 use serde::de::{
   self, DeserializeSeed, EnumAccess, IntoDeserializer, MapAccess, SeqAccess, VariantAccess, Visitor,
 };
-use serde::{forward_to_deserialize_any, Deserialize};
+use serde::{Deserialize, forward_to_deserialize_any};
 
 use crate::error::{Code, Error, Result};
 
@@ -198,11 +198,7 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
   where
     V: Visitor<'de>,
   {
-    if self == Edn::Nil {
-      visitor.visit_none()
-    } else {
-      visitor.visit_some(self)
-    }
+    if self == Edn::Nil { visitor.visit_none() } else { visitor.visit_some(self) }
   }
 
   fn deserialize_unit_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value>
@@ -317,7 +313,7 @@ impl<'de> MapAccess<'de> for MapEdn<'_, 'de> {
       // pass over any keys that serde can't handle
       match k {
         Edn::Key(_) | Edn::Symbol(_) | Edn::Str(_) => {
-          return Ok(Some(seed.deserialize(k.clone())?))
+          return Ok(Some(seed.deserialize(k.clone())?));
         }
         _ => {
           self.de.pop_first();

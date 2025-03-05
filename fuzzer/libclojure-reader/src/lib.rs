@@ -2,7 +2,7 @@ use clojure_reader::edn;
 use jni::objects::{JClass, JString};
 use jni::JNIEnv;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "system" fn Java_foo_bar_Rust_roundtripRust<'local>(
   mut env: JNIEnv<'local>,
   _class: JClass<'local>,

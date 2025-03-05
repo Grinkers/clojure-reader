@@ -6,7 +6,7 @@ extern crate alloc;
 
 use alloc::ffi::CString;
 use alloc::format;
-use core::ffi::CStr;
+use core::ffi::{c_char, CStr};
 use core::panic::PanicInfo;
 
 use clojure_reader::edn;
@@ -15,26 +15,26 @@ use clojure_reader::edn;
 fn panic(_panic: &PanicInfo<'_>) -> ! {
   loop {
     unsafe {
-      printf("panic\n".as_ptr().cast::<i8>());
+      printf(c"panic\n".as_ptr());
       sleep_ms(500);
     }
   }
 }
 
-extern "C" {
-  fn printf(format: *const i8, ...) -> i32;
+unsafe extern "C" {
+  fn printf(format: *const c_char, ...) -> i32;
   fn sleep_ms(ms: u32);
 }
 
 #[global_allocator]
 static ALLOCATOR: emballoc::Allocator<4096> = emballoc::Allocator::new();
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 /// # Safety
 /// must be null terminated c str
 /// # Panics
 /// panics on any errors, this is just showing a minimal working example, not best practices.
-pub unsafe extern "C" fn some_edn(edn: *const i8) {
+pub unsafe extern "C" fn some_edn(edn: *const c_char) {
   let c_str: &CStr = unsafe { CStr::from_ptr(edn) };
   let str_slice: &str = c_str.to_str().unwrap();
 
@@ -42,6 +42,6 @@ pub unsafe extern "C" fn some_edn(edn: *const i8) {
   let edn_str = format!("{edn}");
   let c_str = CString::new(edn_str.as_str()).unwrap();
   unsafe {
-    printf("hello edn %s\n\0".as_ptr().cast::<i8>(), c_str.as_ptr());
+    printf(c"hello edn %s\n".as_ptr(), c_str.as_ptr());
   }
 }

@@ -192,21 +192,34 @@ mod test {
     assert_eq!(E::Tuple(1, 2), from_str::<E>(r#"#E/Tuple [1 2]"#).unwrap());
     assert_eq!(E::Struct { a: 1, b: 42 }, from_str::<E>(r#"#E/Struct {:a 1, :b 42}"#,).unwrap());
 
-    assert_eq!(format!("{:?}", from_str::<E>(r#"#B/Unit sillycat"#)), "Err(EdnError { code: Serde(\"namespace in B/Unit can't be matched to E\"), line: None, column: None, ptr: None })");
-    assert_eq!(format!("{:?}", from_str::<E>(r#""#)), "Err(EdnError { code: Serde(\"can't convert Nil into Tagged for enum\"), line: None, column: None, ptr: None })");
-    assert_eq!(format!("{:?}", from_str::<E>(r#"#BUnit sillycat"#)), "Err(EdnError { code: Serde(\"Expected namespace in BUnit for Tagged for enum\"), line: None, column: None, ptr: None })");
+    assert_eq!(
+      format!("{:?}", from_str::<E>(r#"#B/Unit sillycat"#)),
+      "Err(EdnError { code: Serde(\"namespace in B/Unit can't be matched to E\"), line: None, column: None, ptr: None })"
+    );
+    assert_eq!(
+      format!("{:?}", from_str::<E>(r#""#)),
+      "Err(EdnError { code: Serde(\"can't convert Nil into Tagged for enum\"), line: None, column: None, ptr: None })"
+    );
+    assert_eq!(
+      format!("{:?}", from_str::<E>(r#"#BUnit sillycat"#)),
+      "Err(EdnError { code: Serde(\"Expected namespace in BUnit for Tagged for enum\"), line: None, column: None, ptr: None })"
+    );
   }
 
   #[test]
   fn serde_errors() {
-    assert_eq!(format!("{:?}", from_str::<String>(r#"#E/Tuple [4/2]"#)),
-               "Err(EdnError { code: Serde(\"Don't know how to convert Tagged(\\\"E/Tuple\\\", Vector([Rational((4, 2))])) into any\"), line: None, column: None, ptr: None })");
+    assert_eq!(
+      format!("{:?}", from_str::<String>(r#"#E/Tuple [4/2]"#)),
+      "Err(EdnError { code: Serde(\"Don't know how to convert Tagged(\\\"E/Tuple\\\", Vector([Rational((4, 2))])) into any\"), line: None, column: None, ptr: None })"
+    );
 
     #[derive(Deserialize, PartialEq, Debug)]
     struct SomeBytes<'a> {
       data: &'a [u8],
     }
-    assert_eq!(format!("{:?}", from_str::<SomeBytes<'_>>(r#"[4/2]"#)),
-               "Err(EdnError { code: Serde(\"deserialize_bytes is unimplemented/unused\"), line: None, column: None, ptr: None })");
+    assert_eq!(
+      format!("{:?}", from_str::<SomeBytes<'_>>(r#"[4/2]"#)),
+      "Err(EdnError { code: Serde(\"deserialize_bytes is unimplemented/unused\"), line: None, column: None, ptr: None })"
+    );
   }
 }

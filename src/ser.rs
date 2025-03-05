@@ -1,7 +1,7 @@
 use alloc::string::{String, ToString};
 use core::fmt::Display;
 
-use serde::{ser, Serialize};
+use serde::{Serialize, ser};
 
 use crate::error::{Code, Error, Result};
 
