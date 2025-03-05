@@ -30,7 +30,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          toolchain: stable minus 2 releases
+          toolchain: stable
       - name: Test gnu
         run: |
           cargo test --all-features --no-fail-fast --target ${{ matrix.target }}
@@ -67,7 +67,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          toolchain: stable minus 2 releases
+          toolchain: stable
       - name: Build gnu target
         run: |
           cargo build --all-features --target ${{ matrix.target }}
@@ -89,7 +89,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          toolchain: stable minus 2 releases
+          toolchain: stable
       - name: Build Windows
         run: |
           cargo build --all-features --target ${{ matrix.target }}
@@ -110,7 +110,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          toolchain: stable minus 2 releases
+          toolchain: stable
       - name: Test Windows
         run: |
           cargo test --all-features --no-fail-fast --target ${{ matrix.target }}
@@ -132,7 +132,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          toolchain: stable minus 2 releases
+          toolchain: stable
       - name: no_std_release_build_sets
         run: cargo build --no-default-features --features floats --target ${{ matrix.target }}
       - name: no_std_release_build
@@ -158,7 +158,7 @@ jobs:
         - uses: dtolnay/rust-toolchain@stable
           with:
             components: clippy
-            toolchain: stable minus 2 releases
+            toolchain: stable
         - run: cargo clippy --all-features -- --deny warnings
         - run: cargo clippy --no-default-features -- --deny warnings
         - run: cargo clippy --examples -- --deny warnings -A clippy::unwrap-used
