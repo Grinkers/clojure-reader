@@ -38,7 +38,7 @@ impl de::Error for Error {
 fn get_int_from_edn(edn: &Edn<'_>) -> Result<i64> {
   if let Edn::Int(i) = edn {
     return Ok(*i);
-  };
+  }
   Err(de::Error::custom(format!("cannot convert {edn:?} to i64")))
 }
 
@@ -169,7 +169,7 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
     if let Edn::Double(f) = self {
       #[expect(clippy::cast_possible_truncation)]
       return visitor.visit_f32(*f as f32);
-    };
+    }
     Err(de::Error::custom(format!("can't convert {self:?} into f32")))
   }
 
@@ -297,7 +297,7 @@ struct MapEdn<'a, 'de> {
 }
 
 impl<'a, 'de> MapEdn<'a, 'de> {
-  fn new(de: &'a mut BTreeMap<Edn<'de>, Edn<'de>>) -> Self {
+  const fn new(de: &'a mut BTreeMap<Edn<'de>, Edn<'de>>) -> Self {
     MapEdn { de }
   }
 }
@@ -317,7 +317,6 @@ impl<'de> MapAccess<'de> for MapEdn<'_, 'de> {
         }
         _ => {
           self.de.pop_first();
-          continue;
         }
       }
     }

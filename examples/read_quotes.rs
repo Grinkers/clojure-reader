@@ -39,8 +39,7 @@ fn quotify(s: &str) -> Edn<'_> {
     edn
   };
 
-  let edn = wrap_quote(edn);
-  edn
+  wrap_quote(edn)
 }
 
 fn main() {

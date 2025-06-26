@@ -79,7 +79,7 @@ impl Edn<'_> {
     if let Edn::Map(m) = self {
       if let Some(l) = m.get(e) {
         return Some(l);
-      };
+      }
     }
     None
   }

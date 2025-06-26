@@ -279,7 +279,7 @@ fn parse_set<'e>(walker: &mut Walker, slice: &'e str) -> Result<Edn<'e>, Error> 
               column: Some(walker.column),
               ptr: Some(walker.ptr),
             });
-          };
+          }
         }
       }
       _ => {
