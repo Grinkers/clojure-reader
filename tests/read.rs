@@ -236,3 +236,49 @@ fn tagged() {
   );
   assert_eq!(edn::read_string(r"#Unit nil").unwrap(), Edn::Tagged("Unit", Box::new(Edn::Nil)));
 }
+
+#[test]
+fn test_default_map_namespace_syntax() {
+  // see https://github.com/Grinkers/clojure-reader/issues/2
+  let variations = [
+    "{:thingy #:foo{:bar \"baz\"} :more \"stuff\"}",
+    "{:thingy #:foo {:bar \"baz\"} :more \"stuff\"}",
+    "{:more \"stuff\" :thingy #:foo{:bar \"baz\"}}",
+    "{:more \"stuff\" :thingy # :foo{:bar \"baz\"}}",
+  ];
+  for v in variations {
+    let cfg = edn::read_string(&v).unwrap();
+
+    let Edn::Map(cfg) = cfg else { panic!() };
+    assert_eq!(
+      cfg.get(&Edn::Key("thingy")),
+      Some(&Edn::Tagged(
+        ":foo",
+        Box::new(Edn::Map(BTreeMap::from([(Edn::Key("bar"), Edn::Str("baz"))])))
+      ))
+    );
+    assert_eq!(cfg.get(&Edn::Key("more")), Some(&Edn::Str("stuff")));
+  }
+
+  // without keyword `:` symbol.
+  // the tag is parsed/preserved, but we don't support custom readers
+  let variations = [
+    "{:thingy #foo{:bar \"baz\"} :more \"stuff\"}",
+    "{:thingy #foo {:bar \"baz\"} :more \"stuff\"}",
+    "{:more \"stuff\" :thingy #foo{:bar \"baz\"}}",
+    "{:more \"stuff\" :thingy # foo{:bar \"baz\"}}",
+  ];
+  for v in variations {
+    let cfg = edn::read_string(&v).unwrap();
+
+    let Edn::Map(cfg) = cfg else { panic!() };
+    assert_eq!(
+      cfg.get(&Edn::Key("thingy")),
+      Some(&Edn::Tagged(
+        "foo",
+        Box::new(Edn::Map(BTreeMap::from([(Edn::Key("bar"), Edn::Str("baz"))])))
+      ))
+    );
+    assert_eq!(cfg.get(&Edn::Key("more")), Some(&Edn::Str("stuff")));
+  }
+}
