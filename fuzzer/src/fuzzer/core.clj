@@ -10,9 +10,9 @@
 (defn -main
   [& args]
   (init!)
-  (dotimes [_ 9042]
+  (dotimes [_ (if (first args) (Integer/parseInt (first args)) 109042)]
     (let [source (pr-str (cgen/ednable))
-          ; clojure-reader dedn-oesn't preserve order on hashmaps or sets. For now we just use clojure's
+          ; clojure-reader doesn't preserve order on hashmaps or sets. For now we just use clojure's
           ; read-string to make sure the round trip is valid edn.
           clojure-reader (-> (Rust/roundtrip source) cljedn/read-string)
           edn (cljedn/read-string source)]
