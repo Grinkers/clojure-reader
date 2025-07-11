@@ -139,8 +139,10 @@ fn lisp_quoted() {
 }
 
 #[test]
-fn numeric_like_symbols() {
+fn numeric_like_symbols_keywords() {
   assert_eq!(edn::read_string("-foobar").unwrap(), Edn::Symbol("-foobar"));
+  assert_eq!(edn::read_string("-:thi#n=g").unwrap(), Edn::Symbol("-:thi#n=g"));
+  assert_eq!(edn::read_string(":thi#n=g").unwrap(), Edn::Key("thi#n=g"));
 
   assert_eq!(
     edn::read_string("(+foobar +foo+bar+ +'- '-+)").unwrap(),
@@ -238,7 +240,7 @@ fn tagged() {
 }
 
 #[test]
-fn test_default_map_namespace_syntax() {
+fn default_map_namespace_syntax() {
   // see https://github.com/Grinkers/clojure-reader/issues/2
   let variations = [
     "{:thingy #:foo{:bar \"baz\"} :more \"stuff\"}",
@@ -281,4 +283,51 @@ fn test_default_map_namespace_syntax() {
     );
     assert_eq!(cfg.get(&Edn::Key("more")), Some(&Edn::Str("stuff")));
   }
+}
+
+#[test]
+fn namespace_syntax_edge_cases() {
+  let edn_data = edn::read_string(r#"#:thingy {:f#猫o "bar" :baz/bar "qux" 42 24}"#).unwrap();
+
+  assert_eq!(edn_data.get(&Edn::Key("thingy/f#猫o")), Some(&Edn::Str("bar")));
+  assert_eq!(edn_data.get(&Edn::Key("baz/bar")), Some(&Edn::Str("qux")));
+  assert_eq!(edn_data.get(&Edn::Key("foo")), None);
+  assert_eq!(edn_data.get(&Edn::Key("baz")), None);
+  assert_eq!(edn_data.get(&Edn::Key(":baz/bar")), None);
+  assert_eq!(edn_data.get(&Edn::Key("thingy/")), None);
+  assert_eq!(edn_data.get(&Edn::Key("thingy")), None);
+  assert_eq!(edn_data.get(&Edn::Key("thingything")), None);
+
+  let edn_data = edn::read_string(r#"#thingy {:f#猫o "bar" :baz/bar "qux" 42 24}"#).unwrap();
+  assert_eq!(edn_data.get(&Edn::Key("thingy/f#猫o")), None);
+  assert_eq!(edn_data.get(&Edn::Key("baz/bar")), None);
+}
+
+#[test]
+fn get_contains() {
+  let edn_data = edn::read_string(r#"{:f#猫o "bar" :baz/bar "qux" 42 24}"#).unwrap();
+  assert_eq!(edn_data.get(&Edn::Key("f#猫o")), Some(&Edn::Str("bar")));
+  assert_eq!(edn_data.contains(&Edn::Key("f#猫o")), true);
+  assert_eq!(edn_data.get(&Edn::Key("foo")), None);
+  assert_eq!(edn_data.contains(&Edn::Key("foo")), false);
+
+  let edn_data = edn::read_string(r#"#{:f#猫o "bar" :baz/bar "qux" 42 24}"#).unwrap();
+  assert_eq!(edn_data.contains(&Edn::Key("f#猫o")), true);
+  assert_eq!(edn_data.contains(&Edn::Int(42)), true);
+  assert_eq!(edn_data.contains(&Edn::Key("foo")), false);
+
+  let edn_data = edn::read_string(r#"[:f#猫o "bar" :baz/bar "qux" 42 24]"#).unwrap();
+  assert_eq!(edn_data.contains(&Edn::Key("f#猫o")), true);
+  assert_eq!(edn_data.contains(&Edn::Int(42)), true);
+  assert_eq!(edn_data.contains(&Edn::Key("foo")), false);
+
+  let edn_data = edn::read_string(r#"(:f#猫o "bar" :baz/bar "qux" 42 24)"#).unwrap();
+  assert_eq!(edn_data.contains(&Edn::Key("f#猫o")), true);
+  assert_eq!(edn_data.contains(&Edn::Int(42)), true);
+  assert_eq!(edn_data.contains(&Edn::Key("foo")), false);
+
+  let edn_data = edn::read_string(r#"42"#).unwrap();
+  assert_eq!(edn_data.contains(&Edn::Key("f#猫o")), false);
+  assert_eq!(edn_data.contains(&Edn::Int(42)), false);
+  assert_eq!(edn_data.contains(&Edn::Key("foo")), false);
 }
