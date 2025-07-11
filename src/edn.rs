@@ -80,6 +80,36 @@ impl Edn<'_> {
       if let Some(l) = m.get(e) {
         return Some(l);
       }
+    } else if let Edn::Tagged(tag, m) = self {
+      if let Edn::Key(e) = e {
+        // Break out early if there's no namespaces
+        if !e.contains('/') {
+          return None;
+        }
+
+        // ignore the leading ':'
+        if !tag.starts_with(':') {
+          return None;
+        }
+        let tag = tag.get(1..)?;
+
+        // check if the Key starts with the saved Tag
+        if e.starts_with(tag) {
+          let (_, key) = e.rsplit_once(tag)?;
+
+          // ensure there's a '/' and strip it
+          if key.chars().nth(0) != Some('/') {
+            return None;
+          }
+          let key = key.get(1..)?;
+
+          return m.get(&Edn::Key(key));
+        }
+        return m.get(&Edn::Key(e));
+      }
+
+      // Cover cases where it's not a keyword
+      return m.get(e);
     }
     None
   }
