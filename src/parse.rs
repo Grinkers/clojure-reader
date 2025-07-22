@@ -28,7 +28,7 @@ impl Walker {
   #[inline(always)]
   fn slurp_literal<'w>(&mut self, slice: &'w str) -> &'w str {
     let token = slice[self.ptr..]
-      .split(|c: char| c.is_whitespace() || DELIMITERS.contains(&c))
+      .split(|c: char| c.is_whitespace() || DELIMITERS.contains(&c) || c == '"')
       .next()
       .expect("Expected at least an empty slice");
 

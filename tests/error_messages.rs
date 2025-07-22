@@ -73,3 +73,24 @@ fn parse_tag_no_end() {
     "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(7), ptr: Some(7) }"
   );
 }
+
+#[test]
+fn parse_symbol_with_quotes() {
+  assert_eq!(
+    err_as_string(r#"[thingy" c]"#),
+    "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(12), ptr: Some(11) }"
+  );
+
+  assert_eq!(
+    err_as_string(r#"{"thingy c}"#),
+    "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(12), ptr: Some(11) }"
+  );
+
+  assert_eq!(
+    err_as_string(
+      r#"[thingy\"
+c]"#
+    ),
+    "EdnError { code: UnexpectedEOF, line: Some(2), column: Some(3), ptr: Some(12) }"
+  );
+}
