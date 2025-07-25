@@ -139,8 +139,10 @@ fn lisp_quoted() {
 }
 
 #[test]
-fn numeric_like_symbols() {
+fn numeric_like_symbols_keywords() {
   assert_eq!(edn::read_string("-foobar").unwrap(), Edn::Symbol("-foobar"));
+  assert_eq!(edn::read_string("-:thi#n=g").unwrap(), Edn::Symbol("-:thi#n=g"));
+  assert_eq!(edn::read_string(":thi#n=g").unwrap(), Edn::Key("thi#n=g"));
 
   assert_eq!(
     edn::read_string("(+foobar +foo+bar+ +'- '-+)").unwrap(),
