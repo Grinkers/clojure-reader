@@ -98,10 +98,11 @@ impl Walker {
     let starting_ptr = self.ptr;
 
     loop {
-      if let Some(c) = self.nibble_next(slice) {
-        if c == ' ' {
-          return Ok(&slice[starting_ptr..self.ptr - 1]);
+      if let Some(c) = self.peek_next(slice) {
+        if c.is_whitespace() || DELIMITERS.contains(&c) {
+          return Ok(&slice[starting_ptr..self.ptr]);
         }
+        let _ = self.nibble_next(slice);
       } else {
         return Err(Error {
           code: Code::UnexpectedEOF,

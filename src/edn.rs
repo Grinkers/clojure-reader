@@ -74,12 +74,47 @@ pub fn read(edn: &str) -> Result<(Edn<'_>, &str), error::Error> {
   Ok((r.0, r.1))
 }
 
+fn get_tag<'a>(tag: &'a str, key: &'a str) -> Option<&'a str> {
+  // Break out early if there's no namespaces
+  if !key.contains('/') {
+    return None;
+  }
+
+  // ignore the leading ':'
+  if !tag.starts_with(':') {
+    return None;
+  }
+  let tag = tag.get(1..)?;
+  Some(tag)
+}
+
+fn check_key<'a>(tag: &'a str, key: &'a str) -> &'a str {
+  // check if the Key starts with the saved Tag
+  if key.starts_with(tag) {
+    let (_, key) = key.rsplit_once(tag).expect("Tag must exist, because it starts with it.");
+
+    // ensure there's a '/' and strip it
+    if let Some(k) = key.strip_prefix('/') {
+      return k;
+    }
+  }
+  key
+}
+
 impl Edn<'_> {
   pub fn get(&self, e: &Self) -> Option<&Self> {
     if let Edn::Map(m) = self {
-      if let Some(l) = m.get(e) {
-        return Some(l);
+      return m.get(e);
+    } else if let Edn::Tagged(tag, m) = self {
+      if let Edn::Key(key) = e {
+        let tag = get_tag(tag, key)?;
+        let key = check_key(tag, key);
+
+        return m.get(&Edn::Key(key));
       }
+
+      // Cover cases where it's not a keyword
+      return m.get(e);
     }
     None
   }
@@ -91,6 +126,27 @@ impl Edn<'_> {
     };
 
     vec.get(i)
+  }
+
+  pub fn contains(&self, e: &Self) -> bool {
+    match self {
+      Edn::Map(m) => m.contains_key(e),
+      Edn::Tagged(tag, m) => {
+        if let Edn::Key(key) = e {
+          let Some(tag) = get_tag(tag, key) else { return false };
+          let key = check_key(tag, key);
+
+          return m.contains(&Edn::Key(key));
+        }
+
+        // Cover cases where it's not a keyword
+        m.contains(e)
+      }
+      Edn::Vector(v) => v.contains(e),
+      Edn::Set(s) => s.contains(e),
+      Edn::List(l) => l.contains(e),
+      _ => false,
+    }
   }
 }
 
