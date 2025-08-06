@@ -3,6 +3,7 @@ use core::fmt::{self, Debug};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Error {
   /// Error code. This is `non_exhaustive`.
   pub code: Code,
@@ -51,5 +52,12 @@ impl Debug for Error {
 impl alloc::fmt::Display for Error {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{self:?}")
+  }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for Code {
+  fn format(&self, fmt: defmt::Formatter<'_>) {
+    defmt::write!(fmt, "Code({:?})", self);
   }
 }

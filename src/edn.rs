@@ -235,3 +235,10 @@ impl fmt::Display for Edn<'_> {
     }
   }
 }
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for Edn<'_> {
+  fn format(&self, fmt: defmt::Formatter<'_>) {
+    defmt::write!(fmt, "{}", self);
+  }
+}

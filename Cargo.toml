@@ -32,14 +32,16 @@ arbitrary-nums = ["bigdecimal", "num-bigint"]
 default = ["floats", "std" ]
 floats = ["ordered-float"]
 full = ["default", "arbitrary-nums", "derive"]
+defmt = ["dep:defmt"]
 derive = ["serde"]
 std = []
 
 [dependencies]
-bigdecimal = { version = "0.4.6", default-features = false, optional = true }
-num-bigint = { version = "0.4.6", default-features = false, optional = true }
-ordered-float = { version = "5.0", default-features = false, optional = true }
-serde = { version = "^1.0", features = ["alloc"], default-features = false, optional = true }
+bigdecimal    = { version = "0.4.6", default-features = false, optional = true }
+defmt         = { version = "1",     default-features = false, optional = true }
+num-bigint    = { version = "0.4.6", default-features = false, optional = true }
+ordered-float = { version = "5.0",   default-features = false, optional = true }
+serde         = { version = "^1.0",  default-features = false, optional = true, features = ["alloc"] }
 
 [dev-dependencies]
 serde_derive = "^1.0"
