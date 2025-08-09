@@ -272,15 +272,15 @@ fn parse_set<'e>(walker: &mut Walker, slice: &'e str) -> Result<Edn<'e>, Error> 
           });
         }
 
-        if let Some(n) = parse_internal(walker, slice)? {
-          if !set.insert(n) {
-            return Err(Error {
-              code: Code::SetDuplicateKey,
-              line: Some(walker.line),
-              column: Some(walker.column),
-              ptr: Some(walker.ptr),
-            });
-          }
+        if let Some(n) = parse_internal(walker, slice)?
+          && !set.insert(n)
+        {
+          return Err(Error {
+            code: Code::SetDuplicateKey,
+            line: Some(walker.line),
+            column: Some(walker.column),
+            ptr: Some(walker.ptr),
+          });
         }
       }
       _ => {
@@ -381,10 +381,10 @@ fn parse_vector<'e>(walker: &mut Walker, slice: &'e str, delim: char) -> Result<
 
         if let Some(next) = parse_internal(walker, slice)? {
           vec.push(next);
-        } else if let Some(p) = walker.peek_next(slice) {
-          if p != delim {
-            let _ = walker.nibble_next(slice);
-          }
+        } else if let Some(p) = walker.peek_next(slice)
+          && p != delim
+        {
+          let _ = walker.nibble_next(slice);
         }
       }
       _ => {
@@ -412,12 +412,11 @@ fn edn_literal(literal: &str) -> Result<Option<Edn<'_>>, Code> {
       return true;
     }
 
-    if first == '-' || first == '+' {
-      if let Some(s) = second {
-        if s.is_numeric() {
-          return true;
-        }
-      }
+    if (first == '-' || first == '+')
+      && let Some(s) = second
+      && s.is_numeric()
+    {
+      return true;
     }
 
     false
