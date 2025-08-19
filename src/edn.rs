@@ -20,7 +20,7 @@ use ordered_float::OrderedFloat;
 
 use crate::{error, parse};
 
-#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
 #[non_exhaustive]
 pub enum Edn<'e> {
   Vector(Vec<Edn<'e>>),
