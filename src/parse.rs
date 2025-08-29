@@ -500,8 +500,10 @@ fn parse_number(lit: &str) -> Result<Edn<'_>, Code> {
   if let Ok(n) = i64::from_str_radix(number, radix.into()) {
     return Ok(Edn::Int(n * i64::from(polarity)));
   }
-  if let Some((n, d)) = num_den_from_slice(number, polarity) {
-    return Ok(Edn::Rational((n, d)));
+  if radix == 10 {
+    if let Some((n, d)) = num_den_from_slice(number, polarity) {
+      return Ok(Edn::Rational((n, d)));
+    }
   }
 
   #[cfg(feature = "arbitrary-nums")]
@@ -509,8 +511,10 @@ fn parse_number(lit: &str) -> Result<Edn<'_>, Code> {
     return Ok(Edn::BigInt(n));
   }
   #[cfg(feature = "floats")]
-  if let Ok(n) = number.parse::<f64>() {
-    return Ok(Edn::Double((n * f64::from(polarity)).into()));
+  if radix == 10 {
+    if let Ok(n) = number.parse::<f64>() {
+      return Ok(Edn::Double((n * f64::from(polarity)).into()));
+    }
   }
   #[cfg(feature = "arbitrary-nums")]
   if let Some(n) = big_dec_from_slice(number, radix, polarity) {

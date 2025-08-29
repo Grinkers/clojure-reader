@@ -66,6 +66,9 @@ fn whitespace() {
 ]
     }";
   assert_eq!(edn::read_string(e).unwrap(), expected_result);
+
+  let e = "{:somevec,[{:value,42}]}";
+  assert_eq!(edn::read_string(e).unwrap(), expected_result);
 }
 
 #[test]

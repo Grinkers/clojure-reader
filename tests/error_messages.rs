@@ -59,6 +59,18 @@ fn parse_invalid_ints() {
 }
 
 #[test]
+fn test_invalid_radix() {
+  assert_eq!(
+    err_as_string("4r42"),
+    "EdnError { code: InvalidNumber, line: Some(1), column: Some(1), ptr: Some(0) }"
+  );
+  assert_eq!(
+    err_as_string("0x4.20"),
+    "EdnError { code: InvalidNumber, line: Some(1), column: Some(1), ptr: Some(0) }"
+  );
+}
+
+#[test]
 fn parse_tag_no_end() {
   assert_eq!(
     err_as_string(r"#Unit"),
