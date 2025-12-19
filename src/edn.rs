@@ -23,15 +23,15 @@ use crate::{error, parse};
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
 #[non_exhaustive]
 pub enum Edn<'e> {
-  Vector(Vec<Edn<'e>>),
-  Set(BTreeSet<Edn<'e>>),
-  Map(BTreeMap<Edn<'e>, Edn<'e>>),
-  List(Vec<Edn<'e>>),
+  Vector(Vec<Self>),
+  Set(BTreeSet<Self>),
+  Map(BTreeMap<Self, Self>),
+  List(Vec<Self>),
   Key(&'e str),
   Symbol(&'e str),
   Str(&'e str),
   Int(i64),
-  Tagged(&'e str, Box<Edn<'e>>),
+  Tagged(&'e str, Box<Self>),
   #[cfg(feature = "floats")]
   Double(OrderedFloat<f64>),
   Rational((i64, i64)),
