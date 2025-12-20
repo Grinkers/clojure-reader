@@ -8,26 +8,35 @@ use core::primitive::str;
 use crate::edn::Edn;
 use crate::error::{Code, Error};
 
+pub fn parse(edn: &str) -> Result<(Edn<'_>, &str), Error> {
+  let mut walker = Walker::new(edn);
+  let internal_parse = parse_internal(&mut walker)?;
+  internal_parse
+    .map_or_else(|| Ok((Edn::Nil, &edn[walker.ptr..])), |ip| Ok((ip, &edn[walker.ptr..])))
+}
+
 const DELIMITERS: [char; 8] = [',', ']', '}', ')', ';', '(', '[', '{'];
 
 #[derive(Debug)]
-struct Walker {
+struct Walker<'e> {
+  slice: &'e str,
   ptr: usize,
   column: usize,
   line: usize,
+  stack: Vec<ParseContext<'e>>,
 }
 
-impl Default for Walker {
-  fn default() -> Self {
-    Self { ptr: 0, column: 1, line: 1 }
+impl<'e> Walker<'e> {
+  fn new(slice: &'e str) -> Self {
+    Self { slice, ptr: 0, column: 1, line: 1, stack: alloc::vec![ParseContext::Top] }
   }
 }
 
-impl Walker {
+impl<'e> Walker<'e> {
   // Slurps until whitespace or delimiter, returning the slice.
   #[inline(always)]
-  fn slurp_literal<'w>(&mut self, slice: &'w str) -> &'w str {
-    let token = slice[self.ptr..]
+  fn slurp_literal(&mut self) -> &'e str {
+    let token = self.slice[self.ptr..]
       .split(|c: char| c.is_whitespace() || DELIMITERS.contains(&c) || c == '"')
       .next()
       .expect("Expected at least an empty slice");
@@ -39,30 +48,30 @@ impl Walker {
 
   // Slurps a char. Special handling for chars that happen to be delimiters
   #[inline(always)]
-  fn slurp_char<'a>(&mut self, slice: &'a str) -> &'a str {
+  fn slurp_char(&mut self) -> &'e str {
     let starting_ptr = self.ptr;
 
     let mut ptr = 0;
-    while let Some(c) = self.peek_next(slice) {
+    while let Some(c) = self.peek_next() {
       // first is always \\, second is always a char we want.
       // Handles edge cases of having a valid "\\[" but also "\\c[lolthisisvalidedn"
       if ptr > 1 && (c.is_whitespace() || DELIMITERS.contains(&c)) {
         break;
       }
 
-      let _ = self.nibble_next(slice);
+      let _ = self.nibble_next();
       ptr += c.len_utf8();
     }
-    &slice[starting_ptr..starting_ptr + ptr]
+    &self.slice[starting_ptr..starting_ptr + ptr]
   }
 
   #[inline(always)]
-  fn slurp_str<'w>(&mut self, slice: &'w str) -> Result<&'w str, Error> {
-    let _ = self.nibble_next(slice); // Consume the leading '"' char
+  fn slurp_str(&mut self) -> Result<&'e str, Error> {
+    let _ = self.nibble_next(); // Consume the leading '"' char
     let starting_ptr = self.ptr;
     let mut escape = false;
     loop {
-      if let Some(c) = self.nibble_next(slice) {
+      if let Some(c) = self.nibble_next() {
         if escape {
           match c {
             't' | 'r' | 'n' | '\\' | '\"' => (),
@@ -77,7 +86,7 @@ impl Walker {
           }
           escape = false;
         } else if c == '\"' {
-          return Ok(&slice[starting_ptr..self.ptr - 1]);
+          return Ok(&self.slice[starting_ptr..self.ptr - 1]);
         } else {
           escape = c == '\\';
         }
@@ -93,16 +102,16 @@ impl Walker {
   }
 
   #[inline(always)]
-  fn slurp_tag<'w>(&mut self, slice: &'w str) -> Result<&'w str, Error> {
-    self.nibble_whitespace(slice);
+  fn slurp_tag(&mut self) -> Result<&'e str, Error> {
+    self.nibble_whitespace();
     let starting_ptr = self.ptr;
 
     loop {
-      if let Some(c) = self.peek_next(slice) {
+      if let Some(c) = self.peek_next() {
         if c.is_whitespace() || DELIMITERS.contains(&c) {
-          return Ok(&slice[starting_ptr..self.ptr]);
+          return Ok(&self.slice[starting_ptr..self.ptr]);
         }
-        let _ = self.nibble_next(slice);
+        let _ = self.nibble_next();
       } else {
         return Err(Error {
           code: Code::UnexpectedEOF,
@@ -116,18 +125,18 @@ impl Walker {
 
   // Nibbles away until the next new line
   #[inline(always)]
-  fn nibble_newline(&mut self, slice: &str) {
-    let len = slice[self.ptr..].split('\n').next().expect("Expected at least an empty slice");
+  fn nibble_newline(&mut self) {
+    let len = self.slice[self.ptr..].split('\n').next().expect("Expected at least an empty slice");
     self.ptr += len.len();
-    self.nibble_whitespace(slice);
+    self.nibble_whitespace();
   }
 
   // Nibbles away until the start of the next form
   #[inline(always)]
-  fn nibble_whitespace(&mut self, slice: &str) {
-    while let Some(n) = self.peek_next(slice) {
+  fn nibble_whitespace(&mut self) {
+    while let Some(n) = self.peek_next() {
       if n == ',' || n.is_whitespace() {
-        let _ = self.nibble_next(slice);
+        let _ = self.nibble_next();
         continue;
       }
       break;
@@ -136,8 +145,8 @@ impl Walker {
 
   // Consumes next
   #[inline(always)]
-  fn nibble_next<'w>(&'w mut self, slice: &'w str) -> Option<char> {
-    let char = slice[self.ptr..].chars().next();
+  fn nibble_next(&mut self) -> Option<char> {
+    let char = self.slice[self.ptr..].chars().next();
     if let Some(c) = char {
       self.ptr += c.len_utf8();
       if c == '\n' {
@@ -152,255 +161,263 @@ impl Walker {
 
   // Peek into the next char
   #[inline(always)]
-  fn peek_next(&self, slice: &str) -> Option<char> {
-    slice[self.ptr..].chars().next()
+  fn peek_next(&self) -> Option<char> {
+    self.slice[self.ptr..].chars().next()
+  }
+
+  #[inline(always)]
+  fn push_context(&mut self, ctx: ParseContext<'e>) {
+    self.stack.push(ctx);
+  }
+
+  #[inline(always)]
+  fn pop_context(&mut self) -> Option<ParseContext<'e>> {
+    self.stack.pop()
+  }
+
+  #[inline(always)]
+  const fn stack_len(&self) -> usize {
+    self.stack.len()
+  }
+
+  const fn make_error(&self, code: Code) -> Error {
+    Error { code, line: Some(self.line), column: Some(self.column), ptr: Some(self.ptr) }
   }
 }
 
-pub fn parse(edn: &str) -> Result<(Edn<'_>, &str), Error> {
-  let mut walker = Walker::default();
-  let internal_parse = parse_internal(&mut walker, edn)?;
-  internal_parse
-    .map_or_else(|| Ok((Edn::Nil, &edn[walker.ptr..])), |ip| Ok((ip, &edn[walker.ptr..])))
+#[derive(Debug, Clone, Copy)]
+enum OpenDelimiter {
+  Vector,
+  List,
+  Map,
+  Hash,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum ParseContext<'e> {
+  Top,
+  Vector(Vec<Edn<'e>>),
+  List(Vec<Edn<'e>>),
+  Map(BTreeMap<Edn<'e>, Edn<'e>>, Option<Edn<'e>>),
+  Set(BTreeSet<Edn<'e>>),
+  Tag(&'e str),
+  Discard,
 }
 
 #[inline]
-fn parse_internal<'e>(walker: &mut Walker, slice: &'e str) -> Result<Option<Edn<'e>>, Error> {
-  walker.nibble_whitespace(slice);
-  while let Some(next) = walker.peek_next(slice) {
-    let column_start = walker.column;
-    let ptr_start = walker.ptr;
-    let line_start = walker.line;
-    if let Some(ret) = match next {
-      '\\' => match parse_char(walker.slurp_char(slice)) {
-        Ok(edn) => Some(Ok(edn)),
-        Err(code) => {
-          return Err(Error {
-            code,
-            line: Some(walker.line),
-            column: Some(column_start),
-            ptr: Some(walker.ptr),
-          });
+fn parse_element<'e>(walker: &mut Walker<'e>, next: char) -> Result<Edn<'e>, Error> {
+  let column_start = walker.column;
+  let ptr_start = walker.ptr;
+  let line_start = walker.line;
+  match next {
+    '\\' => match parse_char(walker.slurp_char()) {
+      Ok(edn) => Ok(edn),
+      Err(code) => Err(Error {
+        code,
+        line: Some(line_start),
+        column: Some(column_start),
+        ptr: Some(ptr_start),
+      }),
+    },
+    '\"' => Ok(Edn::Str(walker.slurp_str()?)),
+    _ => match edn_literal(walker.slurp_literal()) {
+      Ok(edn) => Ok(edn),
+      Err(code) => Err(Error {
+        code,
+        line: Some(line_start),
+        column: Some(column_start),
+        ptr: Some(ptr_start),
+      }),
+    },
+  }
+}
+
+#[inline]
+fn add_to_context<'e>(
+  context: &mut Option<&mut ParseContext<'e>>,
+  edn: Edn<'e>,
+) -> Result<(), Code> {
+  match context.as_mut() {
+    Some(ParseContext::Vector(vec) | ParseContext::List(vec)) => vec.push(edn),
+    Some(ParseContext::Map(map, pending)) => {
+      if let Some(key) = pending.take() {
+        if map.insert(key, edn).is_some() {
+          return Err(Code::HashMapDuplicateKey);
         }
-      },
-      '\"' => Some(Ok(Edn::Str(walker.slurp_str(slice)?))),
-      // comment. consume until a new line.
-      ';' => {
-        walker.nibble_newline(slice);
-        None
+      } else {
+        *pending = Some(edn);
       }
-      '[' => return Ok(Some(parse_vector(walker, slice, ']')?)),
-      '(' => return Ok(Some(parse_vector(walker, slice, ')')?)),
-      '{' => return Ok(Some(parse_map(walker, slice)?)),
-      '#' => parse_tag_set_discard(walker, slice)?.map(Ok),
-      // non-string literal case
-      _ => match edn_literal(walker.slurp_literal(slice)) {
-        Ok(edn) => match edn {
-          Some(e) => Some(Ok(e)),
-          None => {
-            return Ok(None);
-          }
-        },
-        Err(code) => {
-          return Err(Error {
-            code,
-            line: Some(line_start),
-            column: Some(column_start),
-            ptr: Some(ptr_start),
-          });
-        }
-      },
-    } {
-      return Ok(Some(ret?));
     }
+    Some(ParseContext::Set(set)) => {
+      if !set.insert(edn) {
+        return Err(Code::SetDuplicateKey);
+      }
+    }
+    _ => {} // Do nothing. Errors will bubble up elsewhere.
+  }
+  Ok(())
+}
+
+#[inline]
+fn handle_open_delimiter(walker: &mut Walker<'_>, delim: OpenDelimiter) -> Result<(), Error> {
+  match delim {
+    OpenDelimiter::Vector => {
+      let _ = walker.nibble_next();
+      walker.push_context(ParseContext::Vector(Vec::new()));
+    }
+    OpenDelimiter::List => {
+      let _ = walker.nibble_next();
+      walker.push_context(ParseContext::List(Vec::new()));
+    }
+    OpenDelimiter::Map => {
+      let _ = walker.nibble_next();
+      walker.push_context(ParseContext::Map(BTreeMap::new(), None));
+    }
+    OpenDelimiter::Hash => {
+      let _ = walker.nibble_next();
+      match walker.peek_next() {
+        Some('{') => {
+          let _ = walker.nibble_next();
+          walker.push_context(ParseContext::Set(BTreeSet::new()));
+        }
+        Some('_') => {
+          let _ = walker.nibble_next();
+          walker.push_context(ParseContext::Discard);
+        }
+        _ => {
+          let tag = walker.slurp_tag()?;
+          walker.nibble_whitespace();
+          walker.push_context(ParseContext::Tag(tag));
+        }
+      }
+    }
+  }
+  Ok(())
+}
+
+#[inline]
+fn handle_close_delimiter<'e>(
+  walker: &mut Walker<'e>,
+  delimiter: char,
+) -> Result<Option<Edn<'e>>, Error> {
+  if walker.stack_len() <= 1 {
+    return Err(walker.make_error(Code::UnmatchedDelimiter(delimiter)));
+  }
+  let expected = match walker.stack.last().expect("Len > 1 is never empty") {
+    ParseContext::Vector(_) => ']',
+    ParseContext::List(_) => ')',
+    ParseContext::Map(_, _) | ParseContext::Set(_) => '}',
+    _ => {
+      return Err(walker.make_error(Code::UnmatchedDelimiter(delimiter)));
+    }
+  };
+  if delimiter != expected {
+    return Err(walker.make_error(Code::UnmatchedDelimiter(delimiter)));
+  }
+  let mut edn = match walker.pop_context() {
+    Some(ParseContext::Vector(vec)) => Edn::Vector(vec),
+    Some(ParseContext::List(vec)) => Edn::List(vec),
+    Some(ParseContext::Map(map, pending)) => {
+      if pending.is_some() {
+        return Err(walker.make_error(Code::UnexpectedEOF));
+      }
+      Edn::Map(map)
+    }
+    Some(ParseContext::Set(set)) => Edn::Set(set),
+    _ => {
+      // this should be impossible, due to checking for unmatched delimiters above
+      return Err(walker.make_error(Code::UnmatchedDelimiter(delimiter)));
+    }
+  };
+  let _ = walker.nibble_next();
+
+  if walker.stack_len() == 1 {
+    return Ok(Some(edn));
+  }
+  while let Some(context) = walker.pop_context() {
+    match context {
+      ParseContext::Tag(t) => {
+        edn = Edn::Tagged(t, Box::new(edn));
+      }
+      other => {
+        walker.push_context(other);
+        break;
+      }
+    }
+  }
+
+  if walker.stack_len() == 1 {
+    return Ok(Some(edn));
+  } else if walker.stack.last() == Some(&ParseContext::Discard) {
+    walker.pop_context();
+  } else if let Err(code) = add_to_context(&mut walker.stack.last_mut(), edn) {
+    return Err(walker.make_error(code));
   }
   Ok(None)
 }
 
 #[inline]
-fn parse_tag_set_discard<'e>(
-  walker: &mut Walker,
-  slice: &'e str,
-) -> Result<Option<Edn<'e>>, Error> {
-  let _ = walker.nibble_next(slice); // Consume the leading '#' char
-
-  match walker.peek_next(slice) {
-    Some('{') => parse_set(walker, slice).map(Some),
-    Some('_') => parse_discard(walker, slice),
-    _ => parse_tag(walker, slice).map(Some),
+fn handle_element<'e>(walker: &mut Walker<'e>, next: char) -> Result<Option<Edn<'e>>, Error> {
+  let edn = parse_element(walker, next)?;
+  if walker.stack_len() == 1 {
+    return Ok(Some(edn));
   }
-}
-
-#[inline]
-fn parse_discard<'e>(walker: &mut Walker, slice: &'e str) -> Result<Option<Edn<'e>>, Error> {
-  let _ = walker.nibble_next(slice); // Consume the leading '_' char
-  Ok(match parse_internal(walker, slice)? {
-    None => {
-      return Err(Error {
-        code: Code::UnexpectedEOF,
-        line: Some(walker.line),
-        column: Some(walker.column),
-        ptr: Some(walker.ptr),
-      });
+  let edn = match walker.stack.last() {
+    Some(ParseContext::Tag(tag)) => {
+      let tag = Edn::Tagged(tag, Box::new(edn));
+      walker.pop_context();
+      if walker.stack_len() == 1 {
+        return Ok(Some(tag));
+      }
+      tag
     }
-    _ => match walker.peek_next(slice) {
-      Some(_) => parse_internal(walker, slice)?,
-      None => return Ok(Some(Edn::Nil)),
-    },
-  })
+    Some(ParseContext::Discard) => {
+      walker.pop_context();
+      return Ok(None);
+    }
+    _ => edn,
+  };
+  if let Err(code) = add_to_context(&mut walker.stack.last_mut(), edn) {
+    return Err(walker.make_error(code));
+  }
+  Ok(None)
 }
 
-#[inline]
-fn parse_set<'e>(walker: &mut Walker, slice: &'e str) -> Result<Edn<'e>, Error> {
-  let _ = walker.nibble_next(slice); // Consume the leading '{' char
-  let mut set: BTreeSet<Edn<'_>> = BTreeSet::new();
-
+fn parse_internal<'e>(walker: &mut Walker<'e>) -> Result<Option<Edn<'e>>, Error> {
+  let mut result: Option<Edn<'e>> = None;
   loop {
-    walker.nibble_whitespace(slice);
-    match walker.peek_next(slice) {
-      Some('}') => {
-        let _ = walker.nibble_next(slice);
-        return Ok(Edn::Set(set));
-      }
-      Some(n) => {
-        if n == ']' || n == ')' {
-          return Err(Error {
-            code: Code::UnmatchedDelimiter(n),
-            line: Some(walker.line),
-            column: Some(walker.column),
-            ptr: Some(walker.ptr),
-          });
-        }
-
-        if let Some(n) = parse_internal(walker, slice)?
-          && !set.insert(n)
-        {
-          return Err(Error {
-            code: Code::SetDuplicateKey,
-            line: Some(walker.line),
-            column: Some(walker.column),
-            ptr: Some(walker.ptr),
-          });
+    walker.nibble_whitespace();
+    match walker.peek_next() {
+      Some(';') => walker.nibble_newline(),
+      Some('[') => handle_open_delimiter(walker, OpenDelimiter::Vector)?,
+      Some('(') => handle_open_delimiter(walker, OpenDelimiter::List)?,
+      Some('{') => handle_open_delimiter(walker, OpenDelimiter::Map)?,
+      Some('#') => handle_open_delimiter(walker, OpenDelimiter::Hash)?,
+      Some(d) if matches!(d, ']' | ')' | '}') => {
+        if let Some(edn) = handle_close_delimiter(walker, d)? {
+          result = Some(edn);
+          break;
         }
       }
-      _ => {
-        return Err(Error {
-          code: Code::UnexpectedEOF,
-          line: Some(walker.line),
-          column: Some(walker.column),
-          ptr: Some(walker.ptr),
-        });
+      Some(c) => {
+        if let Some(edn) = handle_element(walker, c)? {
+          result = Some(edn);
+          break;
+        }
+      }
+      None => {
+        if walker.stack_len() > 1 {
+          return Err(walker.make_error(Code::UnexpectedEOF));
+        }
+        break;
       }
     }
   }
+  Ok(result)
 }
 
 #[inline]
-fn parse_tag<'e>(walker: &mut Walker, slice: &'e str) -> Result<Edn<'e>, Error> {
-  let tag = walker.slurp_tag(slice)?;
-  walker.nibble_whitespace(slice);
-  let val = parse_internal(walker, slice)?;
-  if let Some(v) = val {
-    return Ok(Edn::Tagged(tag, Box::new(v)));
-  }
-
-  Err(Error {
-    code: Code::UnexpectedEOF,
-    line: Some(walker.line),
-    column: Some(walker.column),
-    ptr: Some(walker.ptr),
-  })
-}
-
-#[inline]
-fn parse_map<'e>(walker: &mut Walker, slice: &'e str) -> Result<Edn<'e>, Error> {
-  let _ = walker.nibble_next(slice); // Consume the leading '{' char
-  let mut map: BTreeMap<Edn<'_>, Edn<'_>> = BTreeMap::new();
-  loop {
-    walker.nibble_whitespace(slice);
-    match walker.peek_next(slice) {
-      Some('}') => {
-        let _ = walker.nibble_next(slice);
-        return Ok(Edn::Map(map));
-      }
-      Some(n) => {
-        if n == ']' || n == ')' {
-          return Err(Error {
-            code: Code::UnmatchedDelimiter(n),
-            line: Some(walker.line),
-            column: Some(walker.column),
-            ptr: Some(walker.ptr),
-          });
-        }
-
-        let key = parse_internal(walker, slice)?;
-        let val = parse_internal(walker, slice)?;
-
-        // When this is not true, errors are caught on the next loop
-        if let (Some(k), Some(v)) = (key, val) {
-          // Existing keys are considered an error
-          if map.insert(k, v).is_some() {
-            return Err(Error {
-              code: Code::HashMapDuplicateKey,
-              line: Some(walker.line),
-              column: Some(walker.column),
-              ptr: Some(walker.ptr),
-            });
-          }
-        }
-      }
-      _ => {
-        return Err(Error {
-          code: Code::UnexpectedEOF,
-          line: Some(walker.line),
-          column: Some(walker.column),
-          ptr: Some(walker.ptr),
-        });
-      }
-    }
-  }
-}
-
-#[inline]
-fn parse_vector<'e>(walker: &mut Walker, slice: &'e str, delim: char) -> Result<Edn<'e>, Error> {
-  let _ = walker.nibble_next(slice); // Consume the leading '[' or '(' char
-  let mut vec = Vec::new();
-
-  loop {
-    walker.nibble_whitespace(slice);
-    match walker.peek_next(slice) {
-      Some(p) => {
-        if p == delim {
-          let _ = walker.nibble_next(slice);
-          if delim == ']' {
-            return Ok(Edn::Vector(vec));
-          }
-
-          return Ok(Edn::List(vec));
-        }
-
-        if let Some(next) = parse_internal(walker, slice)? {
-          vec.push(next);
-        } else if let Some(p) = walker.peek_next(slice)
-          && p != delim
-        {
-          let _ = walker.nibble_next(slice);
-        }
-      }
-      _ => {
-        return Err(Error {
-          code: Code::UnexpectedEOF,
-          line: Some(walker.line),
-          column: Some(walker.column),
-          ptr: Some(walker.ptr),
-        });
-      }
-    }
-  }
-}
-
-#[inline]
-fn edn_literal(literal: &str) -> Result<Option<Edn<'_>>, Code> {
+fn edn_literal(literal: &str) -> Result<Edn<'_>, Code> {
   fn numeric(s: &str) -> bool {
     let (first, second) = {
       let mut s = s.chars();
@@ -423,18 +440,17 @@ fn edn_literal(literal: &str) -> Result<Option<Edn<'_>>, Code> {
   }
 
   Ok(match literal {
-    "nil" => Some(Edn::Nil),
-    "true" => Some(Edn::Bool(true)),
-    "false" => Some(Edn::Bool(false)),
-    "" => None,
+    "nil" => Edn::Nil,
+    "true" => Edn::Bool(true),
+    "false" => Edn::Bool(false),
     k if k.starts_with(':') => {
       if k.len() <= 1 {
         return Err(Code::InvalidKeyword);
       }
-      Some(Edn::Key(&k[1..]))
+      Edn::Key(&k[1..])
     }
-    n if numeric(n) => return Ok(Some(parse_number(n)?)),
-    _ => Some(Edn::Symbol(literal)),
+    n if numeric(n) => parse_number(n)?,
+    _ => Edn::Symbol(literal),
   })
 }
 

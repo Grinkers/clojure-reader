@@ -18,6 +18,21 @@ fn duplicates() {
     err_as_string("#{:cat 1 2 [42] 2}"),
     "EdnError { code: SetDuplicateKey, line: Some(1), column: Some(18), ptr: Some(17) }"
   );
+
+  assert_eq!(
+    err_as_string("{#foo :a 1 #foo :a 2}"),
+    "EdnError { code: HashMapDuplicateKey, line: Some(1), column: Some(21), ptr: Some(20) }"
+  );
+
+  assert_eq!(
+    err_as_string("#{#bar :x #bar :x}"),
+    "EdnError { code: SetDuplicateKey, line: Some(1), column: Some(18), ptr: Some(17) }"
+  );
+
+  assert_eq!(
+    err_as_string("{:a 1 :a [2]}"),
+    "EdnError { code: HashMapDuplicateKey, line: Some(1), column: Some(13), ptr: Some(12) }"
+  );
 }
 
 #[test]
@@ -104,5 +119,37 @@ fn parse_symbol_with_quotes() {
 c]"#
     ),
     "EdnError { code: UnexpectedEOF, line: Some(2), column: Some(3), ptr: Some(12) }"
+  );
+}
+
+#[test]
+fn unmatched_closing_delimiter_at_top_level() {
+  assert_eq!(
+    err_as_string("}"),
+    "EdnError { code: UnmatchedDelimiter('}'), line: Some(1), column: Some(1), ptr: Some(0) }"
+  );
+}
+
+#[test]
+fn unmatched_delimiter_in_tag_context() {
+  assert_eq!(
+    err_as_string("#tag }"),
+    "EdnError { code: UnmatchedDelimiter('}'), line: Some(1), column: Some(6), ptr: Some(5) }"
+  );
+}
+
+#[test]
+fn map_with_odd_elements() {
+  assert_eq!(
+    err_as_string("{:a}"),
+    "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(4), ptr: Some(3) }"
+  );
+}
+
+#[test]
+fn test_unexpected_eof_in_tag() {
+  assert_eq!(
+    err_as_string("#tag "),
+    "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(6), ptr: Some(5) }"
   );
 }
