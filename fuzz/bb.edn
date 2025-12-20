@@ -12,4 +12,6 @@
                        (fs/copy "libclojure-reader/target/release/libclojure_reader.so" "resources" {:replace-existing true}))}
   run-dev   {:doc     "Rebuilds libclojure-reader, then runs the fuzzer with lein."
              :depends [build-rs]
-             :task    (shell "lein run")}}}
+             :task    (shell "lein run")}
+  libfuzz   {:doc  "Runs the libfuzzer-sys fuzzer"
+             :task (shell "cargo fuzz r fuzz_target_1 -- -runs=42090420")}}}

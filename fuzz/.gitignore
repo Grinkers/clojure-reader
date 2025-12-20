@@ -1,0 +1,17 @@
+*.class
+*.jar
+/.clj-kondo
+/.lein-*
+/.lsp
+/.nrepl-port
+/.prepl-port
+/artifacts
+/checkouts
+/classes
+/corpus
+/coverage
+/resources
+/target
+pom.xml
+pom.xml.asc
+profiles.clj

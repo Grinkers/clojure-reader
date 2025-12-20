@@ -24,3 +24,10 @@ See latest Clojure license for
 [generators.clj](/src/clojure/test_clojure/generators.clj)
 
 For everything else in this repo see [../LICENSE](../LICENSE)
+
+# libfuzzer-sys
+
+## usage
+```bash
+bb run-fuzz
+```
