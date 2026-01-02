@@ -44,13 +44,71 @@ pub enum Edn<'e> {
   Nil,
 }
 
+impl<'e> TryFrom<parse::Node<'e>> for Edn<'e> {
+  type Error = error::Error;
+  /// Elaborates a concrete [`Node`](parse::Node) into an abstract resolved [`Edn`]
+  ///
+  /// # Errors
+  ///
+  /// See [`crate::error::Error`].
+  /// Always returns either `Code::HashMapDuplicateKey` or `Code::SetDuplicateKey`.
+  fn try_from(value: parse::Node<'e>) -> error::Result<Self> {
+    use error::{Code, Error, Result};
+    use parse::Node;
+
+    Ok(match value {
+      Node::Vector(items, _) => {
+        Edn::Vector(items.into_iter().map(TryInto::try_into).collect::<Result<_>>()?)
+      }
+      Node::Set(items, _) => {
+        let mut set = BTreeSet::new();
+        for node in items {
+          let position = node.span().1;
+          if !set.insert(node.try_into()?) {
+            return Err(Error::from_position(Code::SetDuplicateKey, position));
+          }
+        }
+        Edn::Set(set)
+      }
+      Node::Map(entries, _) => {
+        let mut map = BTreeMap::new();
+        for (key, value) in entries {
+          let position = value.span().1;
+          if map.insert(key.try_into()?, value.try_into()?).is_some() {
+            return Err(Error::from_position(Code::HashMapDuplicateKey, position));
+          }
+        }
+        Edn::Map(map)
+      }
+      Node::List(items, _) => {
+        Edn::List(items.into_iter().map(TryInto::try_into).collect::<Result<_>>()?)
+      }
+      Node::Key(key, _) => Edn::Key(key),
+      Node::Symbol(symbol, _) => Edn::Symbol(symbol),
+      Node::Str(str, _) => Edn::Str(str),
+      Node::Int(int, _) => Edn::Int(int),
+      Node::Tagged(tag, node, _) => Edn::Tagged(tag, Box::new((*node).try_into()?)),
+      #[cfg(feature = "floats")]
+      Node::Double(double, _) => Edn::Double(double),
+      Node::Rational(rational, _) => Edn::Rational(rational),
+      #[cfg(feature = "arbitrary-nums")]
+      Node::BigInt(big_int, _) => Edn::BigInt(big_int),
+      #[cfg(feature = "arbitrary-nums")]
+      Node::BigDec(big_dec, _) => Edn::BigDec(big_dec),
+      Node::Char(ch, _) => Edn::Char(ch),
+      Node::Bool(bool, _) => Edn::Bool(bool),
+      Node::Nil(_) => Edn::Nil,
+    })
+  }
+}
+
 /// Reads one object from the &str.
 ///
 /// # Errors
 ///
 /// See [`crate::error::Error`].
 pub fn read_string(edn: &str) -> Result<Edn<'_>, error::Error> {
-  Ok(parse::parse(edn)?.0)
+  Ok(parse::parse_as_edn(edn)?.0)
 }
 
 /// Reads the first object from the &str and the remaining unread &str.
@@ -62,7 +120,7 @@ pub fn read_string(edn: &str) -> Result<Edn<'_>, error::Error> {
 ///
 /// See [`crate::error::Error`].
 pub fn read(edn: &str) -> Result<(Edn<'_>, &str), error::Error> {
-  let r = parse::parse(edn)?;
+  let r = parse::parse_as_edn(edn)?;
   if r.0 == Edn::Nil && r.1.is_empty() {
     return Err(error::Error {
       code: error::Code::UnexpectedEOF,
