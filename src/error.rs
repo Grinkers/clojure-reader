@@ -17,7 +17,7 @@ pub struct Error {
 #[derive(Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum Code {
-  /// Elaboation errors
+  /// Elaboration errors
   HashMapDuplicateKey,
   SetDuplicateKey,
 
