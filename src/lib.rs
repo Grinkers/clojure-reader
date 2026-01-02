@@ -20,4 +20,7 @@ pub mod de;
 #[cfg(feature = "derive")]
 pub mod ser;
 
+#[cfg(feature = "unstable")]
+pub mod parse;
+#[cfg(not(feature = "unstable"))]
 mod parse;
