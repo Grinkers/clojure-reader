@@ -2,6 +2,7 @@
 //!
 //! This crate tries to match the behavior of Clojure's `tools.reader` as much as possible.
 #![no_std]
+#![cfg_attr(feature = "unstable", expect(clippy::missing_errors_doc))]
 
 extern crate alloc;
 #[cfg(feature = "std")]
@@ -20,4 +21,7 @@ pub mod de;
 #[cfg(feature = "derive")]
 pub mod ser;
 
+#[cfg(feature = "unstable")]
+pub mod parse;
+#[cfg(not(feature = "unstable"))]
 mod parse;

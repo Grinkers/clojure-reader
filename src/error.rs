@@ -17,9 +17,11 @@ pub struct Error {
 #[derive(Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum Code {
-  /// Parse errors
+  /// Elaboration errors
   HashMapDuplicateKey,
   SetDuplicateKey,
+
+  /// Parse errors
   InvalidChar,
   InvalidEscape,
   InvalidKeyword,
@@ -34,6 +36,12 @@ pub enum Code {
   /// Serde
   #[cfg(feature = "serde")]
   Serde(alloc::string::String),
+}
+
+impl Error {
+  pub(crate) const fn from_position(code: Code, position: crate::parse::Position) -> Self {
+    Self { code, line: Some(position.line), column: Some(position.column), ptr: Some(position.ptr) }
+  }
 }
 
 impl error::Error for Error {}
