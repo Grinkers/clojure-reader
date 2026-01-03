@@ -324,10 +324,7 @@ fn parse_element<'e>(reader: &mut SourceReader<'e>, next: char) -> Result<Node<'
 }
 
 #[inline]
-fn add_to_context<'e>(
-  context: &mut Option<&mut ParseContext<'e>>,
-  node: Node<'e>,
-) -> Result<(), Code> {
+fn add_to_context<'e>(context: &mut Option<&mut ParseContext<'e>>, node: Node<'e>) {
   match context.as_mut() {
     Some(ParseContext::Vector(vec, _) | ParseContext::List(vec, _) | ParseContext::Set(vec, _)) => {
       vec.push(node);
@@ -341,7 +338,6 @@ fn add_to_context<'e>(
     }
     _ => {} // Do nothing. Errors will bubble up elsewhere.
   }
-  Ok(())
 }
 
 #[inline]
@@ -446,8 +442,8 @@ fn handle_close_delimiter<'e>(
     return Ok(Some(node));
   } else if matches!(walker.stack.last(), Some(&ParseContext::Discard)) {
     walker.pop_context();
-  } else if let Err(code) = add_to_context(&mut walker.stack.last_mut(), node) {
-    return Err(walker.make_error(code));
+  } else {
+    add_to_context(&mut walker.stack.last_mut(), node);
   }
   Ok(None)
 }
@@ -477,9 +473,7 @@ fn handle_element<'e>(walker: &mut Walker<'e, '_>, next: char) -> Result<Option<
     }
     _ => node,
   };
-  if let Err(code) = add_to_context(&mut walker.stack.last_mut(), node) {
-    return Err(walker.make_error(code));
-  }
+  add_to_context(&mut walker.stack.last_mut(), node);
   Ok(None)
 }
 
