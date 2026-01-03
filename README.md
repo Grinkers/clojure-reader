@@ -48,6 +48,10 @@
 
    Enables parsing of arbitrary length/precision Ints and Decimals. Relies on `bigdecimal` and `num-bigint` crates.
 
+## unstable
+
+   Exposes the internal `parse` module for advanced use cases. This feature is unstable and may change without notice.
+
 # no_std
 
    See the [pico example](examples/pico) for a minimalistic example of using this crate with the raspberry pi pico (rp2040)
