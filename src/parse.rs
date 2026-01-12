@@ -364,8 +364,12 @@ fn handle_element<'e>(walker: &mut Walker<'e>, next: char) -> Result<Option<Edn<
   }
   let edn = match walker.stack.last() {
     Some(ParseContext::Tag(tag)) => {
-      let tag = Edn::Tagged(tag, Box::new(edn));
+      let mut tag = Edn::Tagged(tag, Box::new(edn));
       walker.pop_context();
+      while let Some(ParseContext::Tag(t)) = walker.stack.last() {
+        tag = Edn::Tagged(t, Box::new(tag));
+        walker.pop_context();
+      }
       if walker.stack_len() == 1 {
         return Ok(Some(tag));
       }

@@ -240,4 +240,26 @@ fn tagged() {
     Edn::Tagged("inst", Box::new(Edn::Str("1985-04-12T23:20:50.52Z")))
   );
   assert_eq!(edn::read_string(r"#Unit nil").unwrap(), Edn::Tagged("Unit", Box::new(Edn::Nil)));
+
+  assert_eq!(
+    edn::read_string("#pow2 #pow3 2").unwrap(),
+    Edn::Tagged("pow2", Box::new(Edn::Tagged("pow3", Box::new(Edn::Int(2)))))
+  );
+
+  assert_eq!(
+    edn::read_string("#foo #bar #ニャンキャット {:baz #42 \"wut\"}").unwrap(),
+    Edn::Tagged(
+      "foo",
+      Box::new(Edn::Tagged(
+        "bar",
+        Box::new(Edn::Tagged(
+          "ニャンキャット",
+          Box::new(Edn::Map(BTreeMap::from([(
+            Edn::Key("baz"),
+            Edn::Tagged("42", Box::new(Edn::Str("wut")))
+          )])))
+        ))
+      ))
+    )
+  );
 }
