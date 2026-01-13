@@ -2,6 +2,7 @@
 //!
 //! ## Implementations
 //! -  [`core::fmt::Display`] will output valid EDN for any Edn object
+//! -  [`TryFrom`]<[`parse::Node`]> implemented for [`Edn`] will convert the Node into an Edn
 //!
 //! ## Differences from Clojure
 //! -  Escape characters are not escaped.
@@ -48,19 +49,42 @@ impl<'e> TryFrom<parse::Node<'e>> for Edn<'e> {
   type Error = error::Error;
   /// Elaborates a concrete [`Node`](parse::Node) into an abstract resolved [`Edn`]
   ///
+  /// ```
+  /// #[cfg(feature = "unstable")]
+  /// {
+  ///   use clojure_reader::{parse, edn::Edn};
+  ///
+  ///   let edn: Edn = parse::Node::no_discards(parse::NodeKind::Nil, parse::Span::default())
+  ///     .try_into()
+  ///     .unwrap();
+  ///
+  ///   assert_eq!(edn, Edn::Nil);
+  /// }
+  /// ```
+  ///
+  /// # Return value
+  ///
+  /// This function returns:
+  ///
+  /// - `Err(err)` if there were any [duplicate map keys][HMDK] or [duplicate set items][SDK]
+  /// - `Ok(edn)` otherwise
+  ///
   /// # Errors
   ///
   /// See [`crate::error::Error`].
-  /// Always returns either `Code::HashMapDuplicateKey` or `Code::SetDuplicateKey`.
-  fn try_from(value: parse::Node<'e>) -> error::Result<Self> {
+  /// Always returns either [`Code::HashMapDuplicateKey`][HMDK] or [`Code::SetDuplicateKey`][SDK].
+  ///
+  /// [HMDK]: error::Code::HashMapDuplicateKey
+  /// [SDK]: error::Code::SetDuplicateKey
+  fn try_from(parse::Node { kind: value, .. }: parse::Node<'e>) -> error::Result<Self> {
     use error::{Code, Error, Result};
-    use parse::Node;
+    use parse::NodeKind;
 
     Ok(match value {
-      Node::Vector(items, _) => {
+      NodeKind::Vector(items, _) => {
         Edn::Vector(items.into_iter().map(TryInto::try_into).collect::<Result<_>>()?)
       }
-      Node::Set(items, _) => {
+      NodeKind::Set(items, _) => {
         let mut set = BTreeSet::new();
         for node in items {
           let position = node.span().1;
@@ -70,7 +94,7 @@ impl<'e> TryFrom<parse::Node<'e>> for Edn<'e> {
         }
         Edn::Set(set)
       }
-      Node::Map(entries, _) => {
+      NodeKind::Map(entries, _) => {
         let mut map = BTreeMap::new();
         for (key, value) in entries {
           let position = value.span().1;
@@ -80,24 +104,24 @@ impl<'e> TryFrom<parse::Node<'e>> for Edn<'e> {
         }
         Edn::Map(map)
       }
-      Node::List(items, _) => {
+      NodeKind::List(items, _) => {
         Edn::List(items.into_iter().map(TryInto::try_into).collect::<Result<_>>()?)
       }
-      Node::Key(key, _) => Edn::Key(key),
-      Node::Symbol(symbol, _) => Edn::Symbol(symbol),
-      Node::Str(str, _) => Edn::Str(str),
-      Node::Int(int, _) => Edn::Int(int),
-      Node::Tagged(tag, node, _) => Edn::Tagged(tag, Box::new((*node).try_into()?)),
+      NodeKind::Key(key) => Edn::Key(key),
+      NodeKind::Symbol(symbol) => Edn::Symbol(symbol),
+      NodeKind::Str(str) => Edn::Str(str),
+      NodeKind::Int(int) => Edn::Int(int),
+      NodeKind::Tagged(tag, node) => Edn::Tagged(tag, Box::new((*node).try_into()?)),
       #[cfg(feature = "floats")]
-      Node::Double(double, _) => Edn::Double(double),
-      Node::Rational(rational, _) => Edn::Rational(rational),
+      NodeKind::Double(double) => Edn::Double(double),
+      NodeKind::Rational(rational) => Edn::Rational(rational),
       #[cfg(feature = "arbitrary-nums")]
-      Node::BigInt(big_int, _) => Edn::BigInt(big_int),
+      NodeKind::BigInt(big_int) => Edn::BigInt(big_int),
       #[cfg(feature = "arbitrary-nums")]
-      Node::BigDec(big_dec, _) => Edn::BigDec(big_dec),
-      Node::Char(ch, _) => Edn::Char(ch),
-      Node::Bool(bool, _) => Edn::Bool(bool),
-      Node::Nil(_) => Edn::Nil,
+      NodeKind::BigDec(big_dec) => Edn::BigDec(big_dec),
+      NodeKind::Char(ch) => Edn::Char(ch),
+      NodeKind::Bool(bool) => Edn::Bool(bool),
+      NodeKind::Nil => Edn::Nil,
     })
   }
 }
