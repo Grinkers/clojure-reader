@@ -111,7 +111,7 @@ impl<'e> TryFrom<parse::Node<'e>> for Edn<'e> {
       NodeKind::Symbol(symbol) => Edn::Symbol(symbol),
       NodeKind::Str(str) => Edn::Str(str),
       NodeKind::Int(int) => Edn::Int(int),
-      NodeKind::Tagged(tag, node) => Edn::Tagged(tag, Box::new((*node).try_into()?)),
+      NodeKind::Tagged(tag, _, node) => Edn::Tagged(tag, Box::new((*node).try_into()?)),
       #[cfg(feature = "floats")]
       NodeKind::Double(double) => Edn::Double(double),
       NodeKind::Rational(rational) => Edn::Rational(rational),

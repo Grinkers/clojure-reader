@@ -595,6 +595,7 @@ mod test {
       Node::no_discards(
         NodeKind::Tagged(
           "inst",
+          Span(p!(2), p!(6)),
           Box::new(Node::no_discards(
             NodeKind::Str("1985-04-12T23:20:50.52Z"),
             Span(p!(7), p!(32))
@@ -606,7 +607,11 @@ mod test {
     assert_eq!(
       parse::parse(&mut SourceReader::new(r"#Unit nil")).unwrap(),
       Node::no_discards(
-        NodeKind::Tagged("Unit", Box::new(Node::no_discards(NodeKind::Nil, Span(p!(7), p!(10))))),
+        NodeKind::Tagged(
+          "Unit",
+          Span(p!(2), p!(6)),
+          Box::new(Node::no_discards(NodeKind::Nil, Span(p!(7), p!(10))))
+        ),
         Span(p!(1), p!(10))
       )
     );
@@ -616,9 +621,11 @@ mod test {
       Node::no_discards(
         NodeKind::Tagged(
           "pow2",
+          Span(p!(2), p!(6)),
           Box::new(Node::no_discards(
             NodeKind::Tagged(
               "pow3",
+              Span(p!(8), p!(12)),
               Box::new(Node::no_discards(NodeKind::Int(2), Span(p!(13), p!(14))))
             ),
             Span(p!(7), p!(14))
@@ -633,12 +640,15 @@ mod test {
       Node::no_discards(
         NodeKind::Tagged(
           "foo",
+          Span(p!(2), p!(5)),
           Box::new(Node::no_discards(
             NodeKind::Tagged(
               "bar",
+              Span(p!(7), p!(10)),
               Box::new(Node::no_discards(
                 NodeKind::Tagged(
                   "ニャンキャット",
+                  Span(p!(12), p!(19, 32)),
                   Box::new(Node::no_discards(
                     NodeKind::Map(
                       Vec::from([(
@@ -646,6 +656,7 @@ mod test {
                         Node::no_discards(
                           NodeKind::Tagged(
                             "42",
+                            Span(p!(27, 40), p!(29, 42)),
                             Box::new(Node::no_discards(
                               NodeKind::Str("wut"),
                               Span(p!(30, 43), p!(35, 48))

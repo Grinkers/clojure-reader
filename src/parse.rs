@@ -43,7 +43,7 @@ pub enum NodeKind<'e> {
   Symbol(&'e str),
   Str(&'e str),
   Int(i64),
-  Tagged(&'e str, Box<Node<'e>>),
+  Tagged(&'e str, /* Span of the tag string */ Span, Box<Node<'e>>),
   #[cfg(feature = "floats")]
   Double(OrderedFloat<f64>),
   Rational((i64, i64)),
@@ -394,7 +394,7 @@ enum ContextKind<'e> {
   List(Vec<Node<'e>>, Position),
   Map(Vec<(Node<'e>, Node<'e>)>, Option<Node<'e>>, Position),
   Set(Vec<Node<'e>>, Position),
-  Tag(&'e str, Position),
+  Tag(&'e str, /* Span of the tag string */ Span, Position),
   Discard(Position),
 }
 
@@ -488,9 +488,13 @@ fn handle_open_delimiter(walker: &mut Walker<'_, '_>, delim: OpenDelimiter) -> R
           walker.push_context(ParseContext::no_discards(ContextKind::Discard(pos_start)));
         }
         _ => {
+          let tag_pos_start = walker.pos();
           let tag = walker.reader.slurp_tag()?;
+          let tag_span = walker.span_from(tag_pos_start);
+
           walker.reader.nibble_whitespace();
-          walker.push_context(ParseContext::no_discards(ContextKind::Tag(tag, pos_start)));
+          walker
+            .push_context(ParseContext::no_discards(ContextKind::Tag(tag, tag_span, pos_start)));
         }
       }
     }
@@ -548,8 +552,12 @@ fn handle_close_delimiter<'e>(
   }
   while let Some(context) = walker.pop_context() {
     match context {
-      ParseContext { kind: ContextKind::Tag(t, pos_start), discards } => {
-        node = NodeKind::Tagged(t, Box::new(Node { kind: node, span, leading_discards: discards }));
+      ParseContext { kind: ContextKind::Tag(t, t_span, pos_start), discards } => {
+        node = NodeKind::Tagged(
+          t,
+          t_span,
+          Box::new(Node { kind: node, span, leading_discards: discards }),
+        );
         span = walker.span_from(pos_start);
       }
       other => {
@@ -585,19 +593,20 @@ fn handle_element<'e>(walker: &mut Walker<'e, '_>, next: char) -> Result<Option<
     return Ok(Some(node));
   }
   let (node, span) = match walker.stack.last_mut() {
-    Some(ParseContext { kind: ContextKind::Tag(tag, pos_start), discards }) => {
+    Some(ParseContext { kind: ContextKind::Tag(tag, tag_span, pos_start), discards }) => {
       let pos_start = *pos_start;
       let leading_discards = take_discards(discards);
-      let mut node = NodeKind::Tagged(tag, Box::new(Node { kind: node, span, leading_discards }));
+      let mut node =
+        NodeKind::Tagged(tag, *tag_span, Box::new(Node { kind: node, span, leading_discards }));
       let mut span = walker.span_from(pos_start);
 
       walker.pop_context();
-      while let Some(ParseContext { kind: ContextKind::Tag(t, pos_start), discards }) =
+      while let Some(ParseContext { kind: ContextKind::Tag(t, t_span, pos_start), discards }) =
         walker.stack.last_mut()
       {
         let pos_start = *pos_start;
         let leading_discards = take_discards(discards);
-        node = NodeKind::Tagged(t, Box::new(Node { kind: node, span, leading_discards }));
+        node = NodeKind::Tagged(t, *t_span, Box::new(Node { kind: node, span, leading_discards }));
         span = walker.span_from(pos_start);
         walker.pop_context();
       }
