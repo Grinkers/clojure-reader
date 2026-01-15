@@ -34,6 +34,7 @@ floats = ["ordered-float"]
 full = ["default", "arbitrary-nums", "derive"]
 derive = ["serde"]
 std = []
+unstable = []
 
 [dependencies]
 bigdecimal = { version = "0.4.6", default-features = false, optional = true }
