@@ -680,4 +680,302 @@ mod test {
       )
     );
   }
+
+  #[test]
+  fn discards() {
+    // discards in maps
+    let e = "#_\"m\" {
+        #_key1 :cat #_#_discard-of-val1 val1 \"猫\"
+        #_#_#_foo bar baz :r #_val3 #_val3 42/4242 #_#_trailing discard #_#_trailing discard
+    }";
+    assert_eq!(
+      parse::parse(&mut SourceReader::new(e)).unwrap(),
+      Node {
+        leading_discards: vec![Discard(
+          Node::no_discards(NodeKind::Str("m"), Span(p!(3), p!(6))),
+          Span(p!(1), p!(6))
+        )],
+        kind: NodeKind::Map(
+          vec![
+            (
+              Node {
+                leading_discards: vec![Discard(
+                  Node::no_discards(NodeKind::Symbol("key1"), Span(p!(2, 11, 18), p!(2, 15, 22))),
+                  Span(p!(2, 9, 16), p!(2, 15, 22))
+                )],
+                kind: NodeKind::Key("cat"),
+                span: Span(p!(2, 16, 23), p!(2, 20, 27))
+              },
+              Node {
+                leading_discards: vec![Discard(
+                  Node {
+                    leading_discards: vec![Discard(
+                      Node::no_discards(
+                        NodeKind::Symbol("discard-of-val1"),
+                        Span(p!(2, 25, 32), p!(2, 40, 47))
+                      ),
+                      Span(p!(2, 23, 30), p!(2, 40, 47))
+                    )],
+                    kind: NodeKind::Symbol("val1"),
+                    span: Span(p!(2, 41, 48), p!(2, 45, 52))
+                  },
+                  Span(p!(2, 21, 28), p!(2, 45, 52))
+                )],
+                kind: NodeKind::Str("猫"),
+                span: Span(p!(2, 46, 53), p!(2, 49, 58))
+              }
+            ),
+            (
+              Node {
+                leading_discards: vec![Discard(
+                  Node {
+                    leading_discards: vec![Discard(
+                      Node {
+                        leading_discards: vec![Discard(
+                          Node::no_discards(
+                            NodeKind::Symbol("foo"),
+                            Span(p!(3, 15, 73), p!(3, 18, 76))
+                          ),
+                          Span(p!(3, 13, 71), p!(3, 18, 76))
+                        )],
+                        kind: NodeKind::Symbol("bar"),
+                        span: Span(p!(3, 19, 77), p!(3, 22, 80))
+                      },
+                      Span(p!(3, 11, 69), p!(3, 22, 80))
+                    )],
+                    kind: NodeKind::Symbol("baz"),
+                    span: Span(p!(3, 23, 81), p!(3, 26, 84))
+                  },
+                  Span(p!(3, 9, 67), p!(3, 26, 84))
+                )],
+                kind: NodeKind::Key("r"),
+                span: Span(p!(3, 27, 85), p!(3, 29, 87))
+              },
+              Node {
+                leading_discards: vec![
+                  Discard(
+                    Node::no_discards(NodeKind::Symbol("val3"), Span(p!(3, 32, 90), p!(3, 36, 94))),
+                    Span(p!(3, 30, 88), p!(3, 36, 94))
+                  ),
+                  Discard(
+                    Node::no_discards(
+                      NodeKind::Symbol("val3"),
+                      Span(p!(3, 39, 97), p!(3, 43, 101))
+                    ),
+                    Span(p!(3, 37, 95), p!(3, 43, 101))
+                  )
+                ],
+                kind: NodeKind::Rational((42, 4242)),
+                span: Span(p!(3, 44, 102), p!(3, 51, 109))
+              }
+            )
+          ],
+          vec![
+            Discard(
+              Node {
+                leading_discards: vec![Discard(
+                  Node::no_discards(
+                    NodeKind::Symbol("trailing"),
+                    Span(p!(3, 56, 114), p!(3, 64, 122))
+                  ),
+                  Span(p!(3, 54, 112), p!(3, 64, 122))
+                )],
+                kind: NodeKind::Symbol("discard"),
+                span: Span(p!(3, 65, 123), p!(3, 72, 130))
+              },
+              Span(p!(3, 52, 110), p!(3, 72, 130))
+            ),
+            Discard(
+              Node {
+                leading_discards: vec![Discard(
+                  Node::no_discards(
+                    NodeKind::Symbol("trailing"),
+                    Span(p!(3, 77, 135), p!(3, 85, 143))
+                  ),
+                  Span(p!(3, 75, 133), p!(3, 85, 143))
+                )],
+                kind: NodeKind::Symbol("discard"),
+                span: Span(p!(3, 86, 144), p!(3, 93, 151))
+              },
+              Span(p!(3, 73, 131), p!(3, 93, 151))
+            ),
+          ]
+        ),
+        span: Span(p!(7), p!(4, 6, 157)),
+      }
+    );
+
+    // discards in vectors
+    let e = "#_ \"v\" [#_ #_ :key 0 \"foo\" , #_[:key 1] bar #_ trailing  #_  discards ]";
+    assert_eq!(
+      parse::parse(&mut SourceReader::new(e)).unwrap(),
+      Node {
+        leading_discards: vec![Discard(
+          Node::no_discards(NodeKind::Str("v"), Span(p!(4), p!(7))),
+          Span(p!(1), p!(7))
+        )],
+        span: Span(p!(8), p!(72)),
+        kind: NodeKind::Vector(
+          vec![
+            Node {
+              leading_discards: vec![Discard(
+                Node {
+                  leading_discards: vec![Discard(
+                    Node::no_discards(NodeKind::Key("key"), Span(p!(15), p!(19))),
+                    Span(p!(12), p!(19))
+                  )],
+                  kind: NodeKind::Int(0),
+                  span: Span(p!(20), p!(21))
+                },
+                Span(p!(9), p!(21))
+              )],
+              kind: NodeKind::Str("foo"),
+              span: Span(p!(22), p!(27))
+            },
+            Node {
+              leading_discards: vec![Discard(
+                Node::no_discards(
+                  NodeKind::Vector(
+                    vec![
+                      Node::no_discards(NodeKind::Key("key"), Span(p!(33), p!(37))),
+                      Node::no_discards(NodeKind::Int(1), Span(p!(38), p!(39)))
+                    ],
+                    vec![]
+                  ),
+                  Span(p!(32), p!(40))
+                ),
+                Span(p!(30), p!(40))
+              )],
+              kind: NodeKind::Symbol("bar"),
+              span: Span(p!(41), p!(44))
+            }
+          ],
+          vec![
+            Discard(
+              Node::no_discards(NodeKind::Symbol("trailing"), Span(p!(48), p!(56))),
+              Span(p!(45), p!(56))
+            ),
+            Discard(
+              Node::no_discards(NodeKind::Symbol("discards"), Span(p!(62), p!(70))),
+              Span(p!(58), p!(70))
+            )
+          ]
+        ),
+      }
+    );
+
+    // discards in lists
+    let e = "#_ \"l\" (#_:fn println #_:arg \"Hello, World\" #_(:call fn :with arg) )";
+    assert_eq!(
+      parse::parse(&mut SourceReader::new(e)).unwrap(),
+      Node {
+        leading_discards: vec![Discard(
+          Node::no_discards(NodeKind::Str("l"), Span(p!(4), p!(7))),
+          Span(p!(1), p!(7))
+        )],
+        span: Span(p!(8), p!(69)),
+        kind: NodeKind::List(
+          vec![
+            Node {
+              leading_discards: vec![Discard(
+                Node::no_discards(NodeKind::Key("fn"), Span(p!(11), p!(14))),
+                Span(p!(9), p!(14))
+              )],
+              kind: NodeKind::Symbol("println"),
+              span: Span(p!(15), p!(22))
+            },
+            Node {
+              leading_discards: vec![Discard(
+                Node::no_discards(NodeKind::Key("arg"), Span(p!(25), p!(29))),
+                Span(p!(23), p!(29))
+              )],
+              kind: NodeKind::Str("Hello, World"),
+              span: Span(p!(30), p!(44))
+            }
+          ],
+          vec![Discard(
+            Node::no_discards(
+              NodeKind::List(
+                vec![
+                  Node::no_discards(NodeKind::Key("call"), Span(p!(48), p!(53))),
+                  Node::no_discards(NodeKind::Symbol("fn"), Span(p!(54), p!(56))),
+                  Node::no_discards(NodeKind::Key("with"), Span(p!(57), p!(62))),
+                  Node::no_discards(NodeKind::Symbol("arg"), Span(p!(63), p!(66))),
+                ],
+                vec![]
+              ),
+              Span(p!(47), p!(67))
+            ),
+            Span(p!(45), p!(67))
+          )]
+        ),
+      }
+    );
+
+    // discards in sets
+    let e = "#_ \"s\" #{ 1 #_2.2 3 #_#_four 4/1 }";
+    assert_eq!(
+      parse::parse(&mut SourceReader::new(e)).unwrap(),
+      Node {
+        leading_discards: vec![Discard(
+          Node::no_discards(NodeKind::Str("s"), Span(p!(4), p!(7))),
+          Span(p!(1), p!(7))
+        )],
+        span: Span(p!(8), p!(35)),
+        kind: NodeKind::Set(
+          vec![
+            Node::no_discards(NodeKind::Int(1), Span(p!(11), p!(12))),
+            Node {
+              leading_discards: vec![Discard(
+                Node::no_discards(NodeKind::Double((2.2).into()), Span(p!(15), p!(18))),
+                Span(p!(13), p!(18))
+              )],
+              kind: NodeKind::Int(3),
+              span: Span(p!(19), p!(20))
+            },
+          ],
+          vec![Discard(
+            Node {
+              leading_discards: vec![Discard(
+                Node::no_discards(NodeKind::Symbol("four"), Span(p!(25), p!(29))),
+                Span(p!(23), p!(29))
+              )],
+              kind: NodeKind::Rational((4, 1)),
+              span: Span(p!(30), p!(33)),
+            },
+            Span(p!(21), p!(33))
+          )]
+        ),
+      }
+    );
+
+    // discards in tagged elements
+    let e = "#_ \"t\" #uuid #_\"in base64: +B1Prn3sEdCnZQAAAKDJHg\"
+    \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\"";
+    assert_eq!(
+      parse::parse(&mut parse::SourceReader::new(e)).unwrap(),
+      Node {
+        leading_discards: vec![Discard(
+          Node::no_discards(NodeKind::Str("t"), Span(p!(4), p!(7))),
+          Span(p!(1), p!(7))
+        )],
+        kind: NodeKind::Tagged(
+          "uuid",
+          Span(p!(9), p!(13)),
+          Box::new(Node {
+            leading_discards: vec![Discard(
+              Node::no_discards(
+                NodeKind::Str("in base64: +B1Prn3sEdCnZQAAAKDJHg"),
+                Span(p!(16), p!(51))
+              ),
+              Span(p!(14), p!(51))
+            )],
+            kind: NodeKind::Str("f81d4fae-7dec-11d0-a765-00a0c91e6bf6"),
+            span: Span(p!(2, 5, 55), p!(2, 43, 93))
+          })
+        ),
+        span: Span(p!(8), p!(2, 43, 93))
+      }
+    )
+  }
 }
