@@ -153,3 +153,19 @@ fn test_unexpected_eof_in_tag() {
     "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(6), ptr: Some(5) }"
   );
 }
+
+#[test]
+fn parse_discard_no_end() {
+  assert_eq!(
+    err_as_string("#{ #_ }"),
+    "EdnError { code: UnmatchedDelimiter('}'), line: Some(1), column: Some(7), ptr: Some(6) }"
+  );
+}
+
+#[test]
+fn test_unexpected_eof_in_discard() {
+  assert_eq!(
+    err_as_string("#_"),
+    "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(3), ptr: Some(2) }"
+  );
+}

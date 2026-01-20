@@ -2,6 +2,7 @@
 //!
 //! ## Implementations
 //! -  [`core::fmt::Display`] will output valid EDN for any Edn object
+//! -  [`TryFrom`]<[`parse::Node`]> implemented for [`Edn`] will convert the Node into an Edn
 //!
 //! ## Differences from Clojure
 //! -  Escape characters are not escaped.
@@ -44,13 +45,94 @@ pub enum Edn<'e> {
   Nil,
 }
 
+impl<'e> TryFrom<parse::Node<'e>> for Edn<'e> {
+  type Error = error::Error;
+  /// Elaborates a concrete [`Node`](parse::Node) into an abstract resolved [`Edn`]
+  ///
+  /// ```
+  /// #[cfg(feature = "unstable")]
+  /// {
+  ///   use clojure_reader::{parse, edn::Edn};
+  ///
+  ///   let edn: Edn = parse::Node::no_discards(parse::NodeKind::Nil, parse::Span::default())
+  ///     .try_into()
+  ///     .unwrap();
+  ///
+  ///   assert_eq!(edn, Edn::Nil);
+  /// }
+  /// ```
+  ///
+  /// # Return value
+  ///
+  /// This function returns:
+  ///
+  /// - `Err(err)` if there were any [duplicate map keys][HMDK] or [duplicate set items][SDK]
+  /// - `Ok(edn)` otherwise
+  ///
+  /// # Errors
+  ///
+  /// See [`crate::error::Error`].
+  /// Always returns either [`Code::HashMapDuplicateKey`][HMDK] or [`Code::SetDuplicateKey`][SDK].
+  ///
+  /// [HMDK]: error::Code::HashMapDuplicateKey
+  /// [SDK]: error::Code::SetDuplicateKey
+  fn try_from(parse::Node { kind: value, .. }: parse::Node<'e>) -> error::Result<Self> {
+    use error::{Code, Error, Result};
+    use parse::NodeKind;
+
+    Ok(match value {
+      NodeKind::Vector(items, _) => {
+        Edn::Vector(items.into_iter().map(TryInto::try_into).collect::<Result<_>>()?)
+      }
+      NodeKind::Set(items, _) => {
+        let mut set = BTreeSet::new();
+        for node in items {
+          let position = node.span().1;
+          if !set.insert(node.try_into()?) {
+            return Err(Error::from_position(Code::SetDuplicateKey, position));
+          }
+        }
+        Edn::Set(set)
+      }
+      NodeKind::Map(entries, _) => {
+        let mut map = BTreeMap::new();
+        for (key, value) in entries {
+          let position = value.span().1;
+          if map.insert(key.try_into()?, value.try_into()?).is_some() {
+            return Err(Error::from_position(Code::HashMapDuplicateKey, position));
+          }
+        }
+        Edn::Map(map)
+      }
+      NodeKind::List(items, _) => {
+        Edn::List(items.into_iter().map(TryInto::try_into).collect::<Result<_>>()?)
+      }
+      NodeKind::Key(key) => Edn::Key(key),
+      NodeKind::Symbol(symbol) => Edn::Symbol(symbol),
+      NodeKind::Str(str) => Edn::Str(str),
+      NodeKind::Int(int) => Edn::Int(int),
+      NodeKind::Tagged(tag, _, node) => Edn::Tagged(tag, Box::new((*node).try_into()?)),
+      #[cfg(feature = "floats")]
+      NodeKind::Double(double) => Edn::Double(double),
+      NodeKind::Rational(rational) => Edn::Rational(rational),
+      #[cfg(feature = "arbitrary-nums")]
+      NodeKind::BigInt(big_int) => Edn::BigInt(big_int),
+      #[cfg(feature = "arbitrary-nums")]
+      NodeKind::BigDec(big_dec) => Edn::BigDec(big_dec),
+      NodeKind::Char(ch) => Edn::Char(ch),
+      NodeKind::Bool(bool) => Edn::Bool(bool),
+      NodeKind::Nil => Edn::Nil,
+    })
+  }
+}
+
 /// Reads one object from the &str.
 ///
 /// # Errors
 ///
 /// See [`crate::error::Error`].
 pub fn read_string(edn: &str) -> Result<Edn<'_>, error::Error> {
-  Ok(parse::parse(edn)?.0)
+  Ok(parse::parse_as_edn(edn)?.0)
 }
 
 /// Reads the first object from the &str and the remaining unread &str.
@@ -62,7 +144,7 @@ pub fn read_string(edn: &str) -> Result<Edn<'_>, error::Error> {
 ///
 /// See [`crate::error::Error`].
 pub fn read(edn: &str) -> Result<(Edn<'_>, &str), error::Error> {
-  let r = parse::parse(edn)?;
+  let r = parse::parse_as_edn(edn)?;
   if r.0 == Edn::Nil && r.1.is_empty() {
     return Err(error::Error {
       code: error::Code::UnexpectedEOF,
