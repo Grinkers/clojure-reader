@@ -20,7 +20,7 @@ use ordered_float::OrderedFloat;
 ///
 /// **NOTE:** The vector of items in [`Node::Set`] may contain duplicate items
 /// **NOTE:** The vector of entries in [`Node::Map`] may contain entries with duplicate keys
-#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 #[non_exhaustive]
 pub enum NodeKind<'e> {
   Vector(
@@ -58,14 +58,14 @@ pub enum NodeKind<'e> {
 }
 
 /// A **discarded** form containing the node that was discarded
-#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Discard<'e>(pub Node<'e>, pub Span);
 
 /// Concrete EDN syntax-tree
 ///
 /// Once [`parsed`](parse), it can then be converted to an [`Edn`] via [`TryFrom`](Edn::try_from)
 ///
-#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Node<'e> {
   pub kind: NodeKind<'e>,
   pub span: Span,
