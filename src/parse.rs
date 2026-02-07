@@ -1,55 +1,235 @@
+//! An EDN syntax parser in Rust.
 #![expect(clippy::inline_always)]
 
 use alloc::boxed::Box;
-use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
+use core::mem::replace;
 use core::primitive::str;
 
 use crate::edn::Edn;
 use crate::error::{Code, Error};
 
-pub fn parse(edn: &str) -> Result<(Edn<'_>, &str), Error> {
-  let mut walker = Walker::new(edn);
+#[cfg(feature = "arbitrary-nums")]
+use bigdecimal::BigDecimal;
+#[cfg(feature = "arbitrary-nums")]
+use num_bigint::BigInt;
+#[cfg(feature = "floats")]
+use ordered_float::OrderedFloat;
+
+/// Possible kinds of an EDN node
+///
+/// **NOTE:** The vector of items in [`Node::Set`] may contain duplicate items
+/// **NOTE:** The vector of entries in [`Node::Map`] may contain entries with duplicate keys
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[non_exhaustive]
+pub enum NodeKind<'e> {
+  Vector(
+    Vec<Node<'e>>,
+    /* Any trailing discards inside vector, e.g. `[foo bar #_baz #_qux]` */ Vec<Discard<'e>>,
+  ),
+  Set(
+    Vec<Node<'e>>,
+    /* Any trailing discards inside set, e.g. `#{foo bar #_baz #_qux}` */ Vec<Discard<'e>>,
+  ),
+  Map(
+    Vec<(Node<'e>, Node<'e>)>,
+    /* Any trailing discards inside map, e.g. `{:foo bar #_baz #_qux}` */ Vec<Discard<'e>>,
+  ),
+  List(
+    Vec<Node<'e>>,
+    /* Any trailing discards inside list, e.g. `(foo bar #_baz #_qux)` */ Vec<Discard<'e>>,
+  ),
+  Key(&'e str),
+  Symbol(&'e str),
+  Str(&'e str),
+  Int(i64),
+  Tagged(&'e str, /* Span of the tag string */ Span, Box<Node<'e>>),
+  #[cfg(feature = "floats")]
+  Double(OrderedFloat<f64>),
+  Rational((i64, i64)),
+  #[cfg(feature = "arbitrary-nums")]
+  BigInt(BigInt),
+  #[cfg(feature = "arbitrary-nums")]
+  BigDec(BigDecimal),
+  Char(char),
+  Bool(bool),
+  #[default]
+  Nil,
+}
+
+/// A **discarded** form containing the node that was discarded
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Discard<'e>(pub Node<'e>, pub Span);
+
+/// Concrete EDN syntax-tree
+///
+/// Once [`parsed`](parse), it can then be converted to an [`Edn`] via [`TryFrom`](Edn::try_from)
+///
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Node<'e> {
+  pub kind: NodeKind<'e>,
+  pub span: Span,
+  pub leading_discards: Vec<Discard<'e>>,
+}
+
+// Node without discards
+type SpannedNode<'e> = (NodeKind<'e>, Span);
+
+impl Node<'_> {
+  #[inline]
+  pub const fn span(&self) -> Span {
+    self.span
+  }
+}
+
+impl<'e> Node<'e> {
+  /// Construct a `node` with its kind and span but having no leading-discards
+  pub const fn no_discards(kind: NodeKind<'e>, span: Span) -> Self {
+    Self { kind, span, leading_discards: Vec::new() }
+  }
+}
+
+/// Parse a single `Node` from a [`SourceReader`] without consuming it
+///
+/// # Examples
+///
+/// ```
+/// #[cfg(feature = "unstable")]
+/// {
+///   use clojure_reader::parse::{Node, NodeKind::*, SourceReader, parse};
+///
+///   let source = r#"
+/// (->> txs
+///   (keep :refund-amt)
+///   (reduce +))
+///   ; total refund amount
+/// "#;
+///   let mut reader = SourceReader::new(source);
+///   let Node { kind: node, .. } = parse(&mut reader).expect("failed to parse");
+///
+///   let List(nodes, _) = node else { panic!("unexpected") };
+///
+///   // Destruct main list
+///   let nodes: Vec<_> = nodes.into_iter().map(|n| n.kind).collect();
+///   let [Symbol("->>"), Symbol("txs"), List(keep, _), List(reduce, _)] = nodes.as_slice() else {
+///     panic!("unexpected");
+///   };
+///
+///   // Destruct the list calling `keep`
+///   let keep: Vec<_> = keep.into_iter().map(|n| &n.kind).collect();
+///   let [Symbol("keep"), Key("refund-amt")] = keep.as_slice() else {
+///     panic!("unexpected");
+///   };
+///
+///   // Destruct the list calling `reduce`
+///   let reduce: Vec<_> = reduce.into_iter().map(|n| &n.kind).collect();
+///   let [Symbol("reduce"), Symbol("+")] = reduce.as_slice() else {
+///     panic!("unexpected");
+///   };
+///
+///   assert_eq!(reader.remaining(), "\n  ; total refund amount\n");
+/// }
+/// ```
+///
+/// # Errors
+///
+/// See [`crate::error::Error`].
+pub fn parse<'r, 'e: 'r>(reader: &'r mut SourceReader<'e>) -> Result<Node<'e>, Error> {
+  let start_pos = reader.read_pos;
+  let mut walker = Walker::new(reader);
   let internal_parse = parse_internal(&mut walker)?;
-  internal_parse
-    .map_or_else(|| Ok((Edn::Nil, &edn[walker.ptr..])), |ip| Ok((ip, &edn[walker.ptr..])))
+  Ok(
+    internal_parse
+      .unwrap_or_else(|| Node::no_discards(NodeKind::Nil, walker.reader.span_from(start_pos))),
+  )
+}
+
+/// Parses an [`Edn`] by first parsing a [`Node`], and then fallibly converting it
+///
+/// # Errors
+///
+/// See [`crate::error::Error`].
+pub fn parse_as_edn(edn: &str) -> Result<(Edn<'_>, &str), Error> {
+  let mut source_reader = SourceReader::new(edn);
+  let parsed = parse(&mut source_reader)?;
+  let span = parsed.span();
+  Ok((parsed.try_into()?, &edn[span.1.ptr..]))
 }
 
 const DELIMITERS: [char; 8] = [',', ']', '}', ')', ';', '(', '[', '{'];
 
-#[derive(Debug)]
-struct Walker<'e> {
-  slice: &'e str,
-  ptr: usize,
-  column: usize,
-  line: usize,
-  stack: Vec<ParseContext<'e>>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Position {
+  pub line: usize,
+  pub column: usize,
+  pub ptr: usize,
 }
 
-impl<'e> Walker<'e> {
-  fn new(slice: &'e str) -> Self {
-    Self { slice, ptr: 0, column: 1, line: 1, stack: alloc::vec![ParseContext::Top] }
+impl Default for Position {
+  fn default() -> Self {
+    Self { line: 1, column: 1, ptr: 0 }
   }
 }
 
-impl<'e> Walker<'e> {
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Span(pub Position, pub Position);
+
+impl Span {
+  /// Whether the span is empty
+  pub const fn is_empty(&self) -> bool {
+    self.0.ptr == self.1.ptr
+  }
+}
+
+/// A string-slice reader that records how much of the slice has been read
+#[derive(Debug)]
+pub struct SourceReader<'s> {
+  slice: &'s str,
+  // Position till where this string has been read
+  read_pos: Position,
+}
+
+#[derive(Debug)]
+struct Walker<'e, 'r> {
+  reader: &'r mut SourceReader<'e>,
+  stack: Vec<ParseContext<'e>>,
+}
+
+impl<'e> SourceReader<'e> {
+  pub fn new(source: &'e str) -> Self {
+    Self { slice: source, read_pos: Position::default() }
+  }
+
+  /// Span from some previously marked position to the current position of the reader
+  #[inline(always)]
+  pub const fn span_from(&self, marker: Position) -> Span {
+    Span(marker, self.read_pos)
+  }
+
+  /// The portion of the source-string remaining to be read
+  #[cfg_attr(not(feature = "unstable"), expect(dead_code))]
+  // ^ Since this is private when `unstable` isn't enabled
+  pub fn remaining(&self) -> &'e str {
+    &self.slice[self.read_pos.ptr..]
+  }
+
   // Slurps until whitespace or delimiter, returning the slice.
   #[inline(always)]
   fn slurp_literal(&mut self) -> &'e str {
-    let token = self.slice[self.ptr..]
+    let token = self.slice[self.read_pos.ptr..]
       .split(|c: char| c.is_whitespace() || DELIMITERS.contains(&c) || c == '"')
       .next()
       .expect("Expected at least an empty slice");
 
-    self.ptr += token.len();
-    self.column += token.len();
+    self.read_pos.ptr += token.len();
+    self.read_pos.column += token.len();
     token
   }
 
   // Slurps a char. Special handling for chars that happen to be delimiters
   #[inline(always)]
   fn slurp_char(&mut self) -> &'e str {
-    let starting_ptr = self.ptr;
+    let starting_ptr = self.read_pos.ptr;
 
     let mut ptr = 0;
     while let Some(c) = self.peek_next() {
@@ -68,7 +248,7 @@ impl<'e> Walker<'e> {
   #[inline(always)]
   fn slurp_str(&mut self) -> Result<&'e str, Error> {
     let _ = self.nibble_next(); // Consume the leading '"' char
-    let starting_ptr = self.ptr;
+    let starting_ptr = self.read_pos.ptr;
     let mut escape = false;
     loop {
       if let Some(c) = self.nibble_next() {
@@ -76,27 +256,17 @@ impl<'e> Walker<'e> {
           match c {
             't' | 'r' | 'n' | '\\' | '\"' => (),
             _ => {
-              return Err(Error {
-                code: Code::InvalidEscape,
-                column: Some(self.column),
-                line: Some(self.line),
-                ptr: Some(self.ptr),
-              });
+              return Err(Error::from_position(Code::InvalidEscape, self.read_pos));
             }
           }
           escape = false;
         } else if c == '\"' {
-          return Ok(&self.slice[starting_ptr..self.ptr - 1]);
+          return Ok(&self.slice[starting_ptr..self.read_pos.ptr - 1]);
         } else {
           escape = c == '\\';
         }
       } else {
-        return Err(Error {
-          code: Code::UnexpectedEOF,
-          column: Some(self.column),
-          line: Some(self.line),
-          ptr: Some(self.ptr),
-        });
+        return Err(Error::from_position(Code::UnexpectedEOF, self.read_pos));
       }
     }
   }
@@ -104,21 +274,16 @@ impl<'e> Walker<'e> {
   #[inline(always)]
   fn slurp_tag(&mut self) -> Result<&'e str, Error> {
     self.nibble_whitespace();
-    let starting_ptr = self.ptr;
+    let starting_ptr = self.read_pos.ptr;
 
     loop {
       if let Some(c) = self.peek_next() {
         if c.is_whitespace() || DELIMITERS.contains(&c) {
-          return Ok(&self.slice[starting_ptr..self.ptr]);
+          return Ok(&self.slice[starting_ptr..self.read_pos.ptr]);
         }
         let _ = self.nibble_next();
       } else {
-        return Err(Error {
-          code: Code::UnexpectedEOF,
-          column: Some(self.column),
-          line: Some(self.line),
-          ptr: Some(self.ptr),
-        });
+        return Err(Error::from_position(Code::UnexpectedEOF, self.read_pos));
       }
     }
   }
@@ -126,8 +291,9 @@ impl<'e> Walker<'e> {
   // Nibbles away until the next new line
   #[inline(always)]
   fn nibble_newline(&mut self) {
-    let len = self.slice[self.ptr..].split('\n').next().expect("Expected at least an empty slice");
-    self.ptr += len.len();
+    let len =
+      self.slice[self.read_pos.ptr..].split('\n').next().expect("Expected at least an empty slice");
+    self.read_pos.ptr += len.len();
     self.nibble_whitespace();
   }
 
@@ -146,14 +312,14 @@ impl<'e> Walker<'e> {
   // Consumes next
   #[inline(always)]
   fn nibble_next(&mut self) -> Option<char> {
-    let char = self.slice[self.ptr..].chars().next();
+    let char = self.slice[self.read_pos.ptr..].chars().next();
     if let Some(c) = char {
-      self.ptr += c.len_utf8();
+      self.read_pos.ptr += c.len_utf8();
       if c == '\n' {
-        self.line += 1;
-        self.column = 1;
+        self.read_pos.line += 1;
+        self.read_pos.column = 1;
       } else {
-        self.column += 1;
+        self.read_pos.column += 1;
       }
     }
     char
@@ -162,7 +328,27 @@ impl<'e> Walker<'e> {
   // Peek into the next char
   #[inline(always)]
   fn peek_next(&self) -> Option<char> {
-    self.slice[self.ptr..].chars().next()
+    self.slice[self.read_pos.ptr..].chars().next()
+  }
+}
+
+impl<'e, 'r> Walker<'e, 'r> {
+  fn new(reader: &'r mut SourceReader<'e>) -> Self {
+    Self {
+      reader,
+      stack: alloc::vec![ParseContext { kind: ContextKind::Top, discards: Vec::new() }],
+    }
+  }
+
+  #[inline(always)]
+  const fn pos(&self) -> Position {
+    self.reader.read_pos
+  }
+
+  /// Span from some previously marked position to the current position of the walker's reader
+  #[inline(always)]
+  const fn span_from(&self, marker: Position) -> Span {
+    Span(marker, self.reader.read_pos)
   }
 
   #[inline(always)]
@@ -181,7 +367,14 @@ impl<'e> Walker<'e> {
   }
 
   const fn make_error(&self, code: Code) -> Error {
-    Error { code, line: Some(self.line), column: Some(self.column), ptr: Some(self.ptr) }
+    Error::from_position(code, self.pos())
+  }
+
+  fn last_context_discards(&mut self) -> Option<&mut Vec<Discard<'e>>> {
+    match self.stack.last_mut() {
+      Some(ParseContext { kind: _, discards }) => Some(discards),
+      None => None,
+    }
   }
 }
 
@@ -193,101 +386,115 @@ enum OpenDelimiter {
   Hash,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-enum ParseContext<'e> {
+// `Postion`, wherever present, contains the start position of that context
+#[derive(Debug)]
+enum ContextKind<'e> {
   Top,
-  Vector(Vec<Edn<'e>>),
-  List(Vec<Edn<'e>>),
-  Map(BTreeMap<Edn<'e>, Edn<'e>>, Option<Edn<'e>>),
-  Set(BTreeSet<Edn<'e>>),
-  Tag(&'e str),
-  Discard,
+  Vector(Vec<Node<'e>>, Position),
+  List(Vec<Node<'e>>, Position),
+  Map(Vec<(Node<'e>, Node<'e>)>, Option<Node<'e>>, Position),
+  Set(Vec<Node<'e>>, Position),
+  Tag(&'e str, /* Span of the tag string */ Span, Position),
+  Discard(Position),
 }
 
-#[inline]
-fn parse_element<'e>(walker: &mut Walker<'e>, next: char) -> Result<Edn<'e>, Error> {
-  let column_start = walker.column;
-  let ptr_start = walker.ptr;
-  let line_start = walker.line;
-  match next {
-    '\\' => match parse_char(walker.slurp_char()) {
-      Ok(edn) => Ok(edn),
-      Err(code) => Err(Error {
-        code,
-        line: Some(line_start),
-        column: Some(column_start),
-        ptr: Some(ptr_start),
-      }),
-    },
-    '\"' => Ok(Edn::Str(walker.slurp_str()?)),
-    _ => match edn_literal(walker.slurp_literal()) {
-      Ok(edn) => Ok(edn),
-      Err(code) => Err(Error {
-        code,
-        line: Some(line_start),
-        column: Some(column_start),
-        ptr: Some(ptr_start),
-      }),
-    },
+#[derive(Debug)]
+struct ParseContext<'e> {
+  kind: ContextKind<'e>,
+  discards: Vec<Discard<'e>>,
+}
+
+impl<'e> ParseContext<'e> {
+  const fn no_discards(kind: ContextKind<'e>) -> Self {
+    Self { kind, discards: Vec::new() }
   }
 }
 
 #[inline]
-fn add_to_context<'e>(
-  context: &mut Option<&mut ParseContext<'e>>,
-  edn: Edn<'e>,
-) -> Result<(), Code> {
-  match context.as_mut() {
-    Some(ParseContext::Vector(vec) | ParseContext::List(vec)) => vec.push(edn),
-    Some(ParseContext::Map(map, pending)) => {
-      if let Some(key) = pending.take() {
-        if map.insert(key, edn).is_some() {
-          return Err(Code::HashMapDuplicateKey);
-        }
-      } else {
-        *pending = Some(edn);
+fn parse_element<'e>(reader: &mut SourceReader<'e>, next: char) -> Result<SpannedNode<'e>, Error> {
+  let pos_start = reader.read_pos;
+  match next {
+    '\\' => match parse_char(reader.slurp_char()) {
+      Ok(node) => Ok((NodeKind::Char(node), reader.span_from(pos_start))),
+      Err(code) => Err(Error::from_position(code, pos_start)),
+    },
+    '\"' => {
+      let str = reader.slurp_str()?;
+      Ok((NodeKind::Str(str), reader.span_from(pos_start)))
+    }
+    _ => {
+      let lit = reader.slurp_literal();
+      match edn_literal(lit, reader.span_from(pos_start)) {
+        Ok(node) => Ok(node),
+        Err(code) => Err(Error::from_position(code, pos_start)),
       }
     }
-    Some(ParseContext::Set(set)) => {
-      if !set.insert(edn) {
-        return Err(Code::SetDuplicateKey);
+  }
+}
+
+#[expect(clippy::mem_replace_with_default)]
+const fn take_discards<'e>(discards: &mut Vec<Discard<'e>>) -> Vec<Discard<'e>> {
+  replace(discards, Vec::new())
+}
+
+#[inline]
+fn add_to_context<'e>(context: &mut Option<&mut ParseContext<'e>>, (kind, span): SpannedNode<'e>) {
+  match context.as_mut() {
+    Some(ParseContext {
+      kind: ContextKind::Vector(vec, _) | ContextKind::List(vec, _) | ContextKind::Set(vec, _),
+      discards,
+    }) => {
+      let leading_discards = take_discards(discards);
+      vec.push(Node { kind, span, leading_discards });
+    }
+    Some(ParseContext { kind: ContextKind::Map(map, pending, _), discards }) => {
+      let leading_discards = take_discards(discards);
+      let node = Node { kind, span, leading_discards };
+      if let Some(key) = pending.take() {
+        map.push((key, node));
+      } else {
+        *pending = Some(node);
       }
     }
     _ => {} // Do nothing. Errors will bubble up elsewhere.
   }
-  Ok(())
 }
 
 #[inline]
-fn handle_open_delimiter(walker: &mut Walker<'_>, delim: OpenDelimiter) -> Result<(), Error> {
+fn handle_open_delimiter(walker: &mut Walker<'_, '_>, delim: OpenDelimiter) -> Result<(), Error> {
+  let pos_start = walker.pos();
   match delim {
     OpenDelimiter::Vector => {
-      let _ = walker.nibble_next();
-      walker.push_context(ParseContext::Vector(Vec::new()));
+      let _ = walker.reader.nibble_next();
+      walker.push_context(ParseContext::no_discards(ContextKind::Vector(Vec::new(), pos_start)));
     }
     OpenDelimiter::List => {
-      let _ = walker.nibble_next();
-      walker.push_context(ParseContext::List(Vec::new()));
+      let _ = walker.reader.nibble_next();
+      walker.push_context(ParseContext::no_discards(ContextKind::List(Vec::new(), pos_start)));
     }
     OpenDelimiter::Map => {
-      let _ = walker.nibble_next();
-      walker.push_context(ParseContext::Map(BTreeMap::new(), None));
+      let _ = walker.reader.nibble_next();
+      walker.push_context(ParseContext::no_discards(ContextKind::Map(Vec::new(), None, pos_start)));
     }
     OpenDelimiter::Hash => {
-      let _ = walker.nibble_next();
-      match walker.peek_next() {
+      let _ = walker.reader.nibble_next();
+      match walker.reader.peek_next() {
         Some('{') => {
-          let _ = walker.nibble_next();
-          walker.push_context(ParseContext::Set(BTreeSet::new()));
+          let _ = walker.reader.nibble_next();
+          walker.push_context(ParseContext::no_discards(ContextKind::Set(Vec::new(), pos_start)));
         }
         Some('_') => {
-          let _ = walker.nibble_next();
-          walker.push_context(ParseContext::Discard);
+          let _ = walker.reader.nibble_next();
+          walker.push_context(ParseContext::no_discards(ContextKind::Discard(pos_start)));
         }
         _ => {
-          let tag = walker.slurp_tag()?;
-          walker.nibble_whitespace();
-          walker.push_context(ParseContext::Tag(tag));
+          let tag_pos_start = walker.pos();
+          let tag = walker.reader.slurp_tag()?;
+          let tag_span = walker.span_from(tag_pos_start);
+
+          walker.reader.nibble_whitespace();
+          walker
+            .push_context(ParseContext::no_discards(ContextKind::Tag(tag, tag_span, pos_start)));
         }
       }
     }
@@ -297,16 +504,16 @@ fn handle_open_delimiter(walker: &mut Walker<'_>, delim: OpenDelimiter) -> Resul
 
 #[inline]
 fn handle_close_delimiter<'e>(
-  walker: &mut Walker<'e>,
+  walker: &mut Walker<'e, '_>,
   delimiter: char,
-) -> Result<Option<Edn<'e>>, Error> {
+) -> Result<Option<(NodeKind<'e>, Span)>, Error> {
   if walker.stack_len() <= 1 {
     return Err(walker.make_error(Code::UnmatchedDelimiter(delimiter)));
   }
   let expected = match walker.stack.last().expect("Len > 1 is never empty") {
-    ParseContext::Vector(_) => ']',
-    ParseContext::List(_) => ')',
-    ParseContext::Map(_, _) | ParseContext::Set(_) => '}',
+    ParseContext { kind: ContextKind::Vector(..), .. } => ']',
+    ParseContext { kind: ContextKind::List(..), .. } => ')',
+    ParseContext { kind: ContextKind::Map(..) | ContextKind::Set(..), .. } => '}',
     _ => {
       return Err(walker.make_error(Code::UnmatchedDelimiter(delimiter)));
     }
@@ -314,30 +521,44 @@ fn handle_close_delimiter<'e>(
   if delimiter != expected {
     return Err(walker.make_error(Code::UnmatchedDelimiter(delimiter)));
   }
-  let mut edn = match walker.pop_context() {
-    Some(ParseContext::Vector(vec)) => Edn::Vector(vec),
-    Some(ParseContext::List(vec)) => Edn::List(vec),
-    Some(ParseContext::Map(map, pending)) => {
+  let (mut node, mut span) = match walker.pop_context() {
+    Some(ParseContext { kind: ContextKind::Vector(vec, pos_start), discards }) => {
+      let _ = walker.reader.nibble_next();
+      (NodeKind::Vector(vec, discards), walker.span_from(pos_start))
+    }
+    Some(ParseContext { kind: ContextKind::List(vec, pos_start), discards }) => {
+      let _ = walker.reader.nibble_next();
+      (NodeKind::List(vec, discards), walker.span_from(pos_start))
+    }
+    Some(ParseContext { kind: ContextKind::Map(map, pending, pos_start), discards }) => {
       if pending.is_some() {
         return Err(walker.make_error(Code::UnexpectedEOF));
       }
-      Edn::Map(map)
+      let _ = walker.reader.nibble_next();
+      (NodeKind::Map(map, discards), walker.span_from(pos_start))
     }
-    Some(ParseContext::Set(set)) => Edn::Set(set),
+    Some(ParseContext { kind: ContextKind::Set(set, pos_start), discards }) => {
+      let _ = walker.reader.nibble_next();
+      (NodeKind::Set(set, discards), walker.span_from(pos_start))
+    }
     _ => {
       // this should be impossible, due to checking for unmatched delimiters above
       return Err(walker.make_error(Code::UnmatchedDelimiter(delimiter)));
     }
   };
-  let _ = walker.nibble_next();
 
   if walker.stack_len() == 1 {
-    return Ok(Some(edn));
+    return Ok(Some((node, span)));
   }
   while let Some(context) = walker.pop_context() {
     match context {
-      ParseContext::Tag(t) => {
-        edn = Edn::Tagged(t, Box::new(edn));
+      ParseContext { kind: ContextKind::Tag(t, t_span, pos_start), discards } => {
+        node = NodeKind::Tagged(
+          t,
+          t_span,
+          Box::new(Node { kind: node, span, leading_discards: discards }),
+        );
+        span = walker.span_from(pos_start);
       }
       other => {
         walker.push_context(other);
@@ -347,65 +568,96 @@ fn handle_close_delimiter<'e>(
   }
 
   if walker.stack_len() == 1 {
-    return Ok(Some(edn));
-  } else if walker.stack.last() == Some(&ParseContext::Discard) {
+    return Ok(Some((node, span)));
+  } else if let Some(ParseContext { kind: ContextKind::Discard(pos_start), discards }) =
+    walker.stack.last_mut()
+  {
+    let pos_start = *pos_start;
+    let leading_discards = take_discards(discards);
+    let discarded =
+      Discard(Node { kind: node, span, leading_discards }, walker.span_from(pos_start));
     walker.pop_context();
-  } else if let Err(code) = add_to_context(&mut walker.stack.last_mut(), edn) {
-    return Err(walker.make_error(code));
+    walker.stack.last_mut().expect("Top should be there").discards.push(discarded);
+  } else {
+    add_to_context(&mut walker.stack.last_mut(), (node, span));
   }
   Ok(None)
 }
 
 #[inline]
-fn handle_element<'e>(walker: &mut Walker<'e>, next: char) -> Result<Option<Edn<'e>>, Error> {
-  let edn = parse_element(walker, next)?;
+fn handle_element<'e>(walker: &mut Walker<'e, '_>, next: char) -> Result<Option<Node<'e>>, Error> {
+  let (node, span) = parse_element(walker.reader, next)?;
   if walker.stack_len() == 1 {
-    return Ok(Some(edn));
+    let last_ctx = walker.stack.last_mut().expect("stack_len() == 1");
+    let node = Node { kind: node, span, leading_discards: take_discards(&mut last_ctx.discards) };
+    return Ok(Some(node));
   }
-  let edn = match walker.stack.last() {
-    Some(ParseContext::Tag(tag)) => {
-      let mut tag = Edn::Tagged(tag, Box::new(edn));
+  let (node, span) = match walker.stack.last_mut() {
+    Some(ParseContext { kind: ContextKind::Tag(tag, tag_span, pos_start), discards }) => {
+      let pos_start = *pos_start;
+      let leading_discards = take_discards(discards);
+      let mut node =
+        NodeKind::Tagged(tag, *tag_span, Box::new(Node { kind: node, span, leading_discards }));
+      let mut span = walker.span_from(pos_start);
+
       walker.pop_context();
-      while let Some(ParseContext::Tag(t)) = walker.stack.last() {
-        tag = Edn::Tagged(t, Box::new(tag));
+      while let Some(ParseContext { kind: ContextKind::Tag(t, t_span, pos_start), discards }) =
+        walker.stack.last_mut()
+      {
+        let pos_start = *pos_start;
+        let leading_discards = take_discards(discards);
+        node = NodeKind::Tagged(t, *t_span, Box::new(Node { kind: node, span, leading_discards }));
+        span = walker.span_from(pos_start);
         walker.pop_context();
       }
       if walker.stack_len() == 1 {
-        return Ok(Some(tag));
+        let last_ctx = walker.stack.last_mut().expect("stack_len() == 1");
+        let node =
+          Node { kind: node, span, leading_discards: take_discards(&mut last_ctx.discards) };
+        return Ok(Some(node));
       }
-      tag
+      (node, span)
     }
-    Some(ParseContext::Discard) => {
+    Some(ParseContext { kind: ContextKind::Discard(pos_start), discards }) => {
+      let pos_start = *pos_start;
+      let leading_discards = take_discards(discards);
+      let discarded =
+        Discard(Node { kind: node, span, leading_discards }, walker.span_from(pos_start));
       walker.pop_context();
+      walker.stack.last_mut().expect("Top should be there").discards.push(discarded);
       return Ok(None);
     }
-    _ => edn,
+    _ => (node, span),
   };
-  if let Err(code) = add_to_context(&mut walker.stack.last_mut(), edn) {
-    return Err(walker.make_error(code));
-  }
+  add_to_context(&mut walker.stack.last_mut(), (node, span));
   Ok(None)
 }
 
-fn parse_internal<'e>(walker: &mut Walker<'e>) -> Result<Option<Edn<'e>>, Error> {
-  let mut result: Option<Edn<'e>> = None;
+fn parse_internal<'e>(walker: &mut Walker<'e, '_>) -> Result<Option<Node<'e>>, Error> {
+  let mut result: Option<Node<'e>> = None;
   loop {
-    walker.nibble_whitespace();
-    match walker.peek_next() {
-      Some(';') => walker.nibble_newline(),
+    walker.reader.nibble_whitespace();
+    match walker.reader.peek_next() {
+      Some(';') => walker.reader.nibble_newline(),
       Some('[') => handle_open_delimiter(walker, OpenDelimiter::Vector)?,
       Some('(') => handle_open_delimiter(walker, OpenDelimiter::List)?,
       Some('{') => handle_open_delimiter(walker, OpenDelimiter::Map)?,
       Some('#') => handle_open_delimiter(walker, OpenDelimiter::Hash)?,
       Some(d) if matches!(d, ']' | ')' | '}') => {
-        if let Some(edn) = handle_close_delimiter(walker, d)? {
-          result = Some(edn);
+        if let Some((kind, span)) = handle_close_delimiter(walker, d)? {
+          result = Some(Node {
+            kind,
+            span,
+            leading_discards: take_discards(
+              walker.last_context_discards().expect("Top should be there"),
+            ),
+          });
           break;
         }
       }
       Some(c) => {
-        if let Some(edn) = handle_element(walker, c)? {
-          result = Some(edn);
+        if let Some(node) = handle_element(walker, c)? {
+          result = Some(node);
           break;
         }
       }
@@ -421,7 +673,7 @@ fn parse_internal<'e>(walker: &mut Walker<'e>) -> Result<Option<Edn<'e>>, Error>
 }
 
 #[inline]
-fn edn_literal(literal: &str) -> Result<Edn<'_>, Code> {
+fn edn_literal(literal: &str, span: Span) -> Result<SpannedNode<'_>, Code> {
   fn numeric(s: &str) -> bool {
     let (first, second) = {
       let mut s = s.chars();
@@ -444,35 +696,35 @@ fn edn_literal(literal: &str) -> Result<Edn<'_>, Code> {
   }
 
   Ok(match literal {
-    "nil" => Edn::Nil,
-    "true" => Edn::Bool(true),
-    "false" => Edn::Bool(false),
+    "nil" => (NodeKind::Nil, span),
+    "true" => (NodeKind::Bool(true), span),
+    "false" => (NodeKind::Bool(false), span),
     k if k.starts_with(':') => {
       if k.len() <= 1 {
         return Err(Code::InvalidKeyword);
       }
-      Edn::Key(&k[1..])
+      (NodeKind::Key(&k[1..]), span)
     }
-    n if numeric(n) => parse_number(n)?,
-    _ => Edn::Symbol(literal),
+    n if numeric(n) => parse_number(n, span)?,
+    _ => (NodeKind::Symbol(literal), span),
   })
 }
 
 #[inline]
-fn parse_char(lit: &str) -> Result<Edn<'_>, Code> {
+fn parse_char(lit: &str) -> Result<char, Code> {
   let lit = &lit[1..]; // ignore the leading '\\'
   match lit {
-    "newline" => Ok(Edn::Char('\n')),
-    "return" => Ok(Edn::Char('\r')),
-    "tab" => Ok(Edn::Char('\t')),
-    "space" => Ok(Edn::Char(' ')),
-    c if c.len() == 1 => Ok(Edn::Char(c.chars().next().expect("c must be len of 1"))),
+    "newline" => Ok('\n'),
+    "return" => Ok('\r'),
+    "tab" => Ok('\t'),
+    "space" => Ok(' '),
+    c if c.len() == 1 => Ok(c.chars().next().expect("c must be len of 1")),
     _ => Err(Code::InvalidChar),
   }
 }
 
 #[inline]
-fn parse_number(lit: &str) -> Result<Edn<'_>, Code> {
+fn parse_number(lit: &str, span: Span) -> Result<SpannedNode<'_>, Code> {
   let mut chars = lit.chars().peekable();
   let (number, radix, polarity) = {
     let mut num_ptr_start = 0;
@@ -517,27 +769,27 @@ fn parse_number(lit: &str) -> Result<Edn<'_>, Code> {
   };
 
   if let Ok(n) = i64::from_str_radix(number, radix.into()) {
-    return Ok(Edn::Int(n * i64::from(polarity)));
+    return Ok((NodeKind::Int(n * i64::from(polarity)), span));
   }
   if radix == 10
     && let Some((n, d)) = num_den_from_slice(number, polarity)
   {
-    return Ok(Edn::Rational((n, d)));
+    return Ok((NodeKind::Rational((n, d)), span));
   }
 
   #[cfg(feature = "arbitrary-nums")]
   if let Some(n) = big_int_from_slice(number, radix, polarity) {
-    return Ok(Edn::BigInt(n));
+    return Ok((NodeKind::BigInt(n), span));
   }
   #[cfg(feature = "floats")]
   if radix == 10
     && let Ok(n) = number.parse::<f64>()
   {
-    return Ok(Edn::Double((n * f64::from(polarity)).into()));
+    return Ok((NodeKind::Double((n * f64::from(polarity)).into()), span));
   }
   #[cfg(feature = "arbitrary-nums")]
   if let Some(n) = big_dec_from_slice(number, radix, polarity) {
-    return Ok(Edn::BigDec(n));
+    return Ok((NodeKind::BigDec(n), span));
   }
 
   Err(Code::InvalidNumber)
