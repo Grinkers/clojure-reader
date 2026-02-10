@@ -561,7 +561,7 @@ fn handle_close_delimiter<'e>(
         span = walker.span_from(pos_start);
       }
       other => {
-        walker.push_context(other);
+        walker.push_context(other); // If Top was popped, it gets reinserted here
         break;
       }
     }
@@ -576,7 +576,7 @@ fn handle_close_delimiter<'e>(
     let leading_discards = take_discards(discards);
     let discarded =
       Discard(Node { kind: node, span, leading_discards }, walker.span_from(pos_start));
-    walker.pop_context();
+    walker.pop_context(); // Popped context is not Top, so walker.stack still has len >= 1
     walker.stack.last_mut().expect("Top should be there").discards.push(discarded);
   } else {
     add_to_context(&mut walker.stack.last_mut(), (node, span));
@@ -623,7 +623,7 @@ fn handle_element<'e>(walker: &mut Walker<'e, '_>, next: char) -> Result<Option<
       let leading_discards = take_discards(discards);
       let discarded =
         Discard(Node { kind: node, span, leading_discards }, walker.span_from(pos_start));
-      walker.pop_context();
+      walker.pop_context(); // Popped context is not Top, so walker.stack still has len >= 1
       walker.stack.last_mut().expect("Top should be there").discards.push(discarded);
       return Ok(None);
     }
@@ -649,6 +649,7 @@ fn parse_internal<'e>(walker: &mut Walker<'e, '_>) -> Result<Option<Node<'e>>, E
             kind,
             span,
             leading_discards: take_discards(
+              // `handle_close_delimiter` never pops Top, so walker.stack_len() >= 1
               walker.last_context_discards().expect("Top should be there"),
             ),
           });
