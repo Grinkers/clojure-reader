@@ -976,6 +976,86 @@ mod test {
         ),
         span: Span(p!(8), p!(2, 43, 93))
       }
-    )
+    );
+
+    // simple elements in discards
+    let e = "[#_:key, #_sym, #_\"str\", #_1, #_3.14, #_22/7, #_\\c, #_false, #_nil]";
+    assert_eq!(
+      parse::parse(&mut parse::SourceReader::new(e)).unwrap(),
+      Node::no_discards(
+        NodeKind::Vector(
+          vec![],
+          vec![
+            Discard(
+              Node::no_discards(NodeKind::Key("key"), Span(p!(4), p!(8))),
+              Span(p!(2), p!(8))
+            ),
+            Discard(
+              Node::no_discards(NodeKind::Symbol("sym"), Span(p!(12), p!(15))),
+              Span(p!(10), p!(15))
+            ),
+            Discard(
+              Node::no_discards(NodeKind::Str("str"), Span(p!(19), p!(24))),
+              Span(p!(17), p!(24))
+            ),
+            Discard(
+              Node::no_discards(NodeKind::Int(1), Span(p!(28), p!(29))),
+              Span(p!(26), p!(29))
+            ),
+            Discard(
+              Node::no_discards(NodeKind::Double(3.14.into()), Span(p!(33), p!(37))),
+              Span(p!(31), p!(37))
+            ),
+            Discard(
+              Node::no_discards(NodeKind::Rational((22, 7)), Span(p!(41), p!(45))),
+              Span(p!(39), p!(45))
+            ),
+            Discard(
+              Node::no_discards(NodeKind::Char('c'), Span(p!(49), p!(51))),
+              Span(p!(47), p!(51))
+            ),
+            Discard(
+              Node::no_discards(NodeKind::Bool(false), Span(p!(55), p!(60))),
+              Span(p!(53), p!(60))
+            ),
+            Discard(Node::no_discards(NodeKind::Nil, Span(p!(64), p!(67))), Span(p!(62), p!(67))),
+          ],
+        ),
+        Span(p!(1), p!(68))
+      )
+    );
+
+    // tagged element inside discard
+    let e = "(foo #_ #uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\" 3)";
+    assert_eq!(
+      parse::parse(&mut parse::SourceReader::new(e)).unwrap(),
+      Node::no_discards(
+        NodeKind::List(
+          vec![
+            Node::no_discards(NodeKind::Symbol("foo"), Span(p!(2), p!(5))),
+            Node {
+              kind: NodeKind::Int(3),
+              leading_discards: vec![Discard(
+                Node::no_discards(
+                  NodeKind::Tagged(
+                    "uuid",
+                    Span(p!(10), p!(14)),
+                    Box::new(Node::no_discards(
+                      NodeKind::Str("f81d4fae-7dec-11d0-a765-00a0c91e6bf6"),
+                      Span(p!(15), p!(53))
+                    ))
+                  ),
+                  Span(p!(9), p!(53))
+                ),
+                Span(p!(6), p!(53))
+              )],
+              span: Span(p!(54), p!(55))
+            },
+          ],
+          vec![]
+        ),
+        Span(p!(1), p!(56))
+      )
+    );
   }
 }

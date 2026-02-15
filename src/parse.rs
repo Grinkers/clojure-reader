@@ -629,7 +629,19 @@ fn handle_element<'e>(walker: &mut Walker<'e, '_>, next: char) -> Result<Option<
     }
     _ => (node, span),
   };
-  add_to_context(&mut walker.stack.last_mut(), (node, span));
+
+  match walker.pop_context().expect("Top should be there") {
+    // Adding to a discard context discards that element & ends the context
+    ParseContext { kind: ContextKind::Discard(pos_start), discards } => {
+      let discarded =
+        Discard(Node { kind: node, span, leading_discards: discards }, Span(pos_start, span.1));
+      walker.stack.last_mut().expect("Top should be there").discards.push(discarded);
+    }
+    ctx => {
+      walker.push_context(ctx);
+      add_to_context(&mut walker.stack.last_mut(), (node, span));
+    }
+  }
   Ok(None)
 }
 
