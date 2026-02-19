@@ -207,6 +207,17 @@ impl<'e> SourceReader<'e> {
   }
 
   /// The portion of the source-string remaining to be read
+  ///
+  /// ```
+  /// #[cfg(feature = "unstable")]
+  /// {
+  ///   use clojure_reader::parse::{SourceReader, parse};
+  ///
+  ///   let mut s = SourceReader::new("() []");
+  ///   let _ = parse(&mut s).expect("failed to parse");
+  ///   assert_eq!(s.remaining(), " []");
+  /// }
+  /// ```
   #[cfg_attr(not(feature = "unstable"), expect(dead_code))]
   // ^ Since this is private when `unstable` isn't enabled
   pub fn remaining(&self) -> &'e str {
