@@ -213,6 +213,37 @@ impl<'e> SourceReader<'e> {
     &self.slice[self.read_pos.ptr..]
   }
 
+  /// Finishes the source-reader, returning:
+  /// 1. the position one after the last read character, and
+  /// 2. the original source-string.
+  ///
+  /// ```
+  /// #[cfg(feature = "unstable")]
+  /// {
+  ///   use clojure_reader::parse::{Position, SourceReader, parse};
+  ///
+  ///   let mut s = SourceReader::new("() []");
+  ///   let _ = parse(&mut s).expect("failed to parse");
+  ///
+  ///   let (pos, slice) = s.finish();
+  ///   assert_eq!(
+  ///       pos,
+  ///       Position {
+  ///           line: 1,
+  ///           column: 3,
+  ///           ptr: 2
+  ///       }
+  ///   );
+  ///   assert_eq!(slice, "() []");
+  ///   assert_eq!(&slice[pos.ptr..], " []");
+  /// }
+  /// ```
+  #[cfg_attr(not(feature = "unstable"), expect(dead_code))]
+  // ^ Since this is private when `unstable` isn't enabled
+  pub const fn finish(self) -> (Position, &'e str) {
+    (self.read_pos, self.slice)
+  }
+
   // Slurps until whitespace or delimiter, returning the slice.
   #[inline(always)]
   fn slurp_literal(&mut self) -> &'e str {
