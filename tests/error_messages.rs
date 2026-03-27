@@ -51,6 +51,16 @@ fn unbalanced_forms() {
     err_as_string("#inst"),
     "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(6), ptr: Some(5) }"
   );
+
+  assert_eq!(
+    err_as_string("{:a 1 :a 2"),
+    "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(11), ptr: Some(10) }"
+  );
+
+  assert_eq!(
+    err_as_string("#{1 1"),
+    "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(6), ptr: Some(5) }"
+  );
 }
 
 #[test]
