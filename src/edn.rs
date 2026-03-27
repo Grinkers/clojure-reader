@@ -2,7 +2,8 @@
 //!
 //! ## Implementations
 //! -  [`core::fmt::Display`] will output valid EDN for any Edn object
-//! -  [`TryFrom`]<[`parse::Node`]> implemented for [`Edn`] will convert the Node into an Edn
+//! -  With the `unstable` feature enabled, [`TryFrom`]<[`parse::Node`]> implemented for [`Edn`]
+//!    will convert the Node into an Edn
 //!
 //! ## Differences from Clojure
 //! -  Escape characters are not escaped.
