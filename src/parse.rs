@@ -528,6 +528,7 @@ trait InternalParser<'e> {
     &self,
     ctx: Self::SetContext,
     trailing_discards: Vec<Self::Discard>,
+    validate: bool,
     span: Span,
   ) -> Result<Parsed<Self::Item>, Error>;
 
@@ -535,6 +536,7 @@ trait InternalParser<'e> {
     &self,
     ctx: Self::MapContext,
     trailing_discards: Vec<Self::Discard>,
+    validate: bool,
     close_pos: Position,
     span: Span,
   ) -> Result<Parsed<Self::Item>, Error>;
@@ -574,8 +576,8 @@ impl<'e> InternalParser<'e> for EdnBuilder {
   type Discard = ();
   type VectorContext = Vec<Edn<'e>>;
   type ListContext = Vec<Edn<'e>>;
-  type MapContext = (BTreeMap<Edn<'e>, Edn<'e>>, Option<Edn<'e>>);
-  type SetContext = BTreeSet<Edn<'e>>;
+  type MapContext = (Vec<(Parsed<Edn<'e>>, Parsed<Edn<'e>>)>, Option<Parsed<Edn<'e>>>);
+  type SetContext = Vec<Parsed<Edn<'e>>>;
 
   fn atom(&self, atom: Atom<'e>, span: Span) -> Self::Item {
     let _ = span;
@@ -614,11 +616,11 @@ impl<'e> InternalParser<'e> for EdnBuilder {
   }
 
   fn new_map_context(&self) -> Self::MapContext {
-    (BTreeMap::new(), None)
+    (Vec::new(), None)
   }
 
   fn new_set_context(&self) -> Self::SetContext {
-    BTreeSet::new()
+    Vec::new()
   }
 
   fn add_to_vector(
@@ -647,13 +649,11 @@ impl<'e> InternalParser<'e> for EdnBuilder {
     parsed: Parsed<Self::Item>,
     _leading_discards: Vec<Self::Discard>,
   ) -> Result<(), Error> {
-    let (map, pending) = ctx;
+    let (entries, pending) = ctx;
     if let Some(key) = pending.take() {
-      if map.insert(key, parsed.item).is_some() {
-        return Err(Error::from_position(Code::HashMapDuplicateKey, parsed.span.1));
-      }
+      entries.push((key, parsed));
     } else {
-      *pending = Some(parsed.item);
+      *pending = Some(parsed);
     }
     Ok(())
   }
@@ -664,9 +664,7 @@ impl<'e> InternalParser<'e> for EdnBuilder {
     parsed: Parsed<Self::Item>,
     _leading_discards: Vec<Self::Discard>,
   ) -> Result<(), Error> {
-    if !ctx.insert(parsed.item) {
-      return Err(Error::from_position(Code::SetDuplicateKey, parsed.span.1));
-    }
+    ctx.push(parsed);
     Ok(())
   }
 
@@ -683,22 +681,36 @@ impl<'e> InternalParser<'e> for EdnBuilder {
     &self,
     ctx: Self::SetContext,
     _trailing_discards: Vec<Self::Discard>,
+    validate: bool,
     span: Span,
   ) -> Result<Parsed<Self::Item>, Error> {
-    Ok(Parsed::new(Edn::Set(ctx), span))
+    let mut set = BTreeSet::new();
+    for item in ctx {
+      if !set.insert(item.item) && validate {
+        return Err(Error::from_position(Code::SetDuplicateKey, item.span.1));
+      }
+    }
+    Ok(Parsed::new(Edn::Set(set), span))
   }
 
   fn finish_map(
     &self,
     ctx: Self::MapContext,
     _trailing_discards: Vec<Self::Discard>,
+    validate: bool,
     close_pos: Position,
     span: Span,
   ) -> Result<Parsed<Self::Item>, Error> {
     if ctx.1.is_some() {
       return Err(Error::from_position(Code::UnexpectedEOF, close_pos));
     }
-    Ok(Parsed::new(Edn::Map(ctx.0), span))
+    let mut map = BTreeMap::new();
+    for (key, value) in ctx.0 {
+      if map.insert(key.item, value.item).is_some() && validate {
+        return Err(Error::from_position(Code::HashMapDuplicateKey, value.span.1));
+      }
+    }
+    Ok(Parsed::new(Edn::Map(map), span))
   }
 
   fn finish_list(
@@ -844,6 +856,7 @@ impl<'e> InternalParser<'e> for NodeBuilder {
     &self,
     ctx: Self::SetContext,
     trailing_discards: Vec<Self::Discard>,
+    _validate: bool,
     span: Span,
   ) -> Result<Parsed<Self::Item>, Error> {
     Ok(Parsed::new(Node::no_discards(NodeKind::Set(ctx, trailing_discards), span), span))
@@ -853,6 +866,7 @@ impl<'e> InternalParser<'e> for NodeBuilder {
     &self,
     ctx: Self::MapContext,
     trailing_discards: Vec<Self::Discard>,
+    _validate: bool,
     close_pos: Position,
     span: Span,
   ) -> Result<Parsed<Self::Item>, Error> {
@@ -1010,6 +1024,10 @@ fn wrap_pending_tags<'e, 'r, B: InternalParser<'e>>(
   parsed
 }
 
+fn under_discard<'e, B: InternalParser<'e>>(walker: &Walker<'e, '_, B>) -> bool {
+  walker.stack.iter().any(|ctx| matches!(ctx.kind, ContextKind::Discard(..)))
+}
+
 fn complete_value<'e, 'r, B: InternalParser<'e>>(
   walker: &mut Walker<'e, 'r, B>,
   builder: &B,
@@ -1071,13 +1089,15 @@ fn handle_close_delimiter<'e, B: InternalParser<'e>>(
       builder.finish_list(ctx, discards, walker.span_from(pos_start))?
     }
     Some(ParseContext { kind: ContextKind::Map(ctx, pos_start), discards }) => {
+      let validate = !under_discard(walker);
       let close_pos = walker.pos();
       let _ = walker.reader.nibble_next();
-      builder.finish_map(ctx, discards, close_pos, walker.span_from(pos_start))?
+      builder.finish_map(ctx, discards, validate, close_pos, walker.span_from(pos_start))?
     }
     Some(ParseContext { kind: ContextKind::Set(ctx, pos_start), discards }) => {
+      let validate = !under_discard(walker);
       let _ = walker.reader.nibble_next();
-      builder.finish_set(ctx, discards, walker.span_from(pos_start))?
+      builder.finish_set(ctx, discards, validate, walker.span_from(pos_start))?
     }
     _ => {
       return Err(walker.make_error(Code::UnmatchedDelimiter(delimiter)));
