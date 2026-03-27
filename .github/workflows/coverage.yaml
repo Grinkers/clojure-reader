@@ -30,11 +30,16 @@ jobs:
         with:
           command: llvm-cov
           args: --no-report --all-features --no-fail-fast
+      - name: Run unstable parse tests with code coverage
+        uses: actions-rs/cargo@v1
+        with:
+          command: llvm-cov
+          args: --no-report --no-default-features --features unstable --test parse
       - name: Run examples with code coverage
         uses: actions-rs/cargo@v1
         with:
           command: llvm-cov
-          args: --no-report --examples
+          args: --no-report --examples --features unstable
       - name: Generate Report
         uses: actions-rs/cargo@v1
         with:
