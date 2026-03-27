@@ -263,3 +263,10 @@ fn tagged() {
     )
   );
 }
+
+#[test]
+fn discard_tagged_values() {
+  assert_eq!(edn::read_string("[#_ #foo 1]").unwrap(), Edn::Vector(vec![]));
+  assert_eq!(edn::read_string("[#_ #foo 1 2]").unwrap(), Edn::Vector(vec![Edn::Int(2)]));
+  assert_eq!(edn::read_string("#_ #foo 1").unwrap(), Edn::Nil);
+}
