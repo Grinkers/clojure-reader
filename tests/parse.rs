@@ -59,6 +59,29 @@ mod test {
   }
 
   #[test]
+  fn unicode_literals() {
+    assert_eq!(
+      parse::parse(&mut SourceReader::new("猫gatoキャット")).unwrap(),
+      Node::no_discards(NodeKind::Symbol("猫gatoキャット"), Span(p!(1, 1, 0), p!(1, 10, 19)))
+    );
+
+    assert_eq!(
+      parse::parse(&mut SourceReader::new(":猫gatoキャット")).unwrap(),
+      Node::no_discards(NodeKind::Key("猫gatoキャット"), Span(p!(1, 1, 0), p!(1, 11, 20)))
+    );
+
+    let mut reader = SourceReader::new("猫gatoキャット 42");
+    assert_eq!(
+      parse::parse(&mut reader).unwrap(),
+      Node::no_discards(NodeKind::Symbol("猫gatoキャット"), Span(p!(1, 1, 0), p!(1, 10, 19)))
+    );
+    assert_eq!(
+      parse::parse(&mut reader).unwrap(),
+      Node::no_discards(NodeKind::Int(42), Span(p!(1, 11, 20), p!(1, 13, 22)))
+    );
+  }
+
+  #[test]
   fn maps() {
     let e = "{
         :cat \"猫\" ; this is utf-8

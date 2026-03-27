@@ -264,7 +264,7 @@ impl<'e> SourceReader<'e> {
       .expect("Expected at least an empty slice");
 
     self.read_pos.ptr += token.len();
-    self.read_pos.column += token.len();
+    self.read_pos.column += token.chars().count();
     token
   }
 
