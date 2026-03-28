@@ -90,6 +90,10 @@ fn namespace_syntax_edge_cases() {
   let edn_data = edn::read_string(r#"#thingy {:f#猫o "bar" :baz/bar "qux" 42 24}"#).unwrap();
   assert_eq!(edn_data.get(&Edn::Key("thingy/f#猫o")), None);
   assert_eq!(edn_data.get(&Edn::Key("baz/bar")), None);
+
+  let edn_data = edn::read_string(r#"#:thingy {:foo 1}"#).unwrap();
+  assert_eq!(edn_data.get(&Edn::Key("thingy/foo")), Some(&Edn::Int(1)));
+  assert_eq!(edn_data.get(&Edn::Key("thingyfoo")), None);
 }
 
 #[test]
