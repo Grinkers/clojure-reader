@@ -25,15 +25,17 @@
                              :task (shell "cargo llvm-cov --no-report --all-features")}
   cov-std-only              {:doc  "Coverage, std only"
                              :task (shell "cargo llvm-cov --no-report --no-default-features --features std")}
+  cov-unstable-parse        {:doc  "Coverage, unstable parse test"
+                             :task (shell "cargo llvm-cov --no-report --no-default-features --features unstable --test parse")}
   cov-examples              {:doc  "Coverage, examples"
                              :task (shell "cargo llvm-cov --no-report --examples --all-features")}
   cov-clean                 {:doc  "Cleans all .profraw files and generated html"
                              :task (shell "cargo llvm-cov clean --workspace")}
   cov-html                  {:doc     "Runs llvm-cov to generate human readable html"
-                             :depends [cov-clean cov-all-features cov-std-only cov-examples]
+                             :depends [cov-clean cov-all-features cov-std-only cov-unstable-parse cov-examples]
                              :task    (shell "cargo llvm-cov report --html")}
   cov                       {:doc     "Generates coverage and reports to the terminal"
-                             :depends [cov-clean cov-all-features cov-std-only cov-examples]
+                             :depends [cov-clean cov-all-features cov-std-only cov-unstable-parse cov-examples]
                              :task    (shell "cargo llvm-cov report")}
   test                      {:doc     "Runs all tests and checks"
                              :depends [cargo-test cargo-fmt clippy]}}}

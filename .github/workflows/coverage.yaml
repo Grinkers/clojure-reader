@@ -39,12 +39,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: llvm-cov
-          args: --no-report --examples --features unstable
-      - name: Run serde example with code coverage
-        uses: actions-rs/cargo@v1
-        with:
-          command: llvm-cov
-          args: --no-report --example serde --features derive
+          args: --no-report --examples --all-features
       - name: Generate Report
         uses: actions-rs/cargo@v1
         with:
