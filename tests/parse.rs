@@ -339,6 +339,27 @@ mod test {
   }
 
   #[test]
+  #[cfg(feature = "arbitrary-nums")]
+  fn big_num_nodes() {
+    use bigdecimal::BigDecimal;
+    use num_bigint::BigInt;
+
+    let mut reader = SourceReader::new("42N 1.25M");
+
+    assert_eq!(
+      parse::parse(&mut reader).unwrap(),
+      Node::no_discards(NodeKind::BigInt(BigInt::from(42)), Span(p!(1), p!(4)))
+    );
+    assert_eq!(
+      parse::parse(&mut reader).unwrap(),
+      Node::no_discards(
+        NodeKind::BigDec(BigDecimal::parse_bytes(b"1.25", 10).unwrap()),
+        Span(p!(5), p!(10))
+      )
+    );
+  }
+
+  #[test]
   fn parse_radix_ints() {
     assert_eq!(
       parse::parse(&mut SourceReader::new("16r2a")).unwrap(),

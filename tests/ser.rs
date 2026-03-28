@@ -3,9 +3,11 @@ mod test {
   extern crate alloc;
 
   use alloc::collections::BTreeMap;
+  use alloc::string::String;
   use alloc::vec::Vec;
 
   use clojure_reader::ser::to_string;
+  use serde::ser;
   use serde_derive::Serialize;
 
   #[test]
@@ -129,5 +131,40 @@ mod test {
     let refs = Refs { bytes: s.as_bytes(), owned_bytes: [1, 2, 3, 4] };
     let expected = "{:bytes [121 97 121 32 99 97 116 115], :owned_bytes [1 2 3 4]}";
     assert_eq!(expected, to_string(&refs).unwrap());
+  }
+
+  #[test]
+  fn direct_serialize_bytes() {
+    struct Bytes([u8; 3]);
+
+    impl serde::Serialize for Bytes {
+      fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+      where
+        S: serde::Serializer,
+      {
+        serializer.serialize_bytes(&self.0)
+      }
+    }
+
+    assert_eq!("[1 2 3]", to_string(&Bytes([1, 2, 3])).unwrap());
+  }
+
+  #[test]
+  fn serialize_custom_error() {
+    struct Fails;
+
+    impl serde::Serialize for Fails {
+      fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+      where
+        S: serde::Serializer,
+      {
+        Err(ser::Error::custom("silly cats"))
+      }
+    }
+
+    assert_eq!(
+      format!("{:?}", to_string(&Fails)),
+      "Err(EdnError { code: Serde(\"silly cats\"), line: None, column: None, ptr: None })"
+    );
   }
 }

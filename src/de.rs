@@ -42,6 +42,19 @@ fn get_int_from_edn(edn: &Edn<'_>) -> Result<i64> {
   Err(de::Error::custom(format!("cannot convert {edn:?} to i64")))
 }
 
+fn get_bytes_from_edn(edn: &Edn<'_>) -> Result<Vec<u8>> {
+  match edn {
+    Edn::Vector(list) | Edn::List(list) => list
+      .iter()
+      .map(|item| {
+        let int = get_int_from_edn(item)?;
+        u8::try_from(int).map_err(|_| de::Error::custom(format!("can't convert {int} into u8")))
+      })
+      .collect(),
+    _ => Err(de::Error::custom(format!("can't convert {edn:?} into bytes"))),
+  }
+}
+
 impl<'de> de::Deserializer<'de> for Edn<'de> {
   type Error = Error;
 
@@ -180,18 +193,29 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
     self.deserialize_str(visitor)
   }
 
-  fn deserialize_bytes<V>(self, _visitor: V) -> Result<V::Value>
+  fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value>
   where
     V: Visitor<'de>,
   {
-    Err(de::Error::custom("deserialize_bytes is unimplemented/unused".to_string()))
+    struct BytesFromBuf<V>(V);
+    impl<'de, V: Visitor<'de>> Visitor<'de> for BytesFromBuf<V> {
+      type Value = V::Value;
+      fn expecting(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.0.expecting(f)
+      }
+      fn visit_byte_buf<E: de::Error>(self, v: Vec<u8>) -> core::result::Result<Self::Value, E> {
+        self.0.visit_bytes(&v)
+      }
+    }
+    self.deserialize_byte_buf(BytesFromBuf(visitor))
   }
 
   fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value>
   where
     V: Visitor<'de>,
   {
-    self.deserialize_bytes(visitor)
+    let buf = get_bytes_from_edn(&self)?;
+    visitor.visit_byte_buf(buf)
   }
 
   fn deserialize_option<V>(self, visitor: V) -> Result<V::Value>
