@@ -5,8 +5,10 @@ mod test {
   use alloc::borrow::ToOwned;
   use alloc::string::{String, ToString};
   use alloc::vec::Vec;
+  use core::fmt;
 
   use clojure_reader::de::from_str;
+  use serde::de::{self, Visitor};
   use serde_derive::Deserialize;
 
   #[test]
@@ -49,6 +51,74 @@ mod test {
 
     let res = from_str::<f32>(edn_str);
     assert!(res.is_err());
+  }
+
+  #[test]
+  fn integer_overflow_errors() {
+    assert_eq!(
+      format!("{:?}", from_str::<i8>("128")),
+      "Err(EdnError { code: Serde(\"can't convert Err(TryFromIntError(())) into i8\"), line: None, column: None, ptr: None })"
+    );
+    assert_eq!(
+      format!("{:?}", from_str::<i16>("32768")),
+      "Err(EdnError { code: Serde(\"can't convert Err(TryFromIntError(())) into i16\"), line: None, column: None, ptr: None })"
+    );
+    assert_eq!(
+      format!("{:?}", from_str::<i32>("2147483648")),
+      "Err(EdnError { code: Serde(\"can't convert Err(TryFromIntError(())) into i32\"), line: None, column: None, ptr: None })"
+    );
+    assert_eq!(
+      format!("{:?}", from_str::<u16>("65536")),
+      "Err(EdnError { code: Serde(\"can't convert Err(TryFromIntError(())) into u16\"), line: None, column: None, ptr: None })"
+    );
+    assert_eq!(
+      format!("{:?}", from_str::<u32>("4294967296")),
+      "Err(EdnError { code: Serde(\"can't convert Err(TryFromIntError(())) into u32\"), line: None, column: None, ptr: None })"
+    );
+    assert_eq!(
+      format!("{:?}", from_str::<u64>("-1")),
+      "Err(EdnError { code: Serde(\"can't convert Err(TryFromIntError(())) into u64\"), line: None, column: None, ptr: None })"
+    );
+  }
+
+  #[test]
+  fn byte_buf() {
+    #[derive(Debug)]
+    struct ByteBuf;
+
+    impl<'de> serde::Deserialize<'de> for ByteBuf {
+      fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+      where
+        D: serde::Deserializer<'de>,
+      {
+        struct ByteBufVisitor;
+
+        impl<'de> Visitor<'de> for ByteBufVisitor {
+          type Value = ByteBuf;
+
+          fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("a byte buffer")
+          }
+
+          fn visit_byte_buf<E>(self, _v: Vec<u8>) -> Result<Self::Value, E>
+          where
+            E: de::Error,
+          {
+            Ok(ByteBuf)
+          }
+        }
+
+        deserializer.deserialize_byte_buf(ByteBufVisitor)
+      }
+    }
+
+    assert!(matches!(from_str::<ByteBuf>("[1 2 3]"), Ok(ByteBuf)));
+    assert_eq!(from_str::<Vec<u8>>("[1 2 3]").unwrap(), vec![1, 2, 3]);
+    assert_eq!(from_str::<Vec<u8>>("(1 2 3)").unwrap(), vec![1, 2, 3]);
+    assert_eq!(
+      format!("{:?}", from_str::<Vec<u8>>("[256]")),
+      "Err(EdnError { code: Serde(\"can't convert Err(TryFromIntError(())) into u8\"), line: None, column: None, ptr: None })"
+    );
   }
 
   #[test]
@@ -219,7 +289,7 @@ mod test {
     }
     assert_eq!(
       format!("{:?}", from_str::<SomeBytes<'_>>(r#"[4/2]"#)),
-      "Err(EdnError { code: Serde(\"deserialize_bytes is unimplemented/unused\"), line: None, column: None, ptr: None })"
+      "Err(EdnError { code: Serde(\"can't convert Rational((4, 2)) into bytes\"), line: None, column: None, ptr: None })"
     );
   }
 }

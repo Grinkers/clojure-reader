@@ -180,11 +180,22 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
     self.deserialize_str(visitor)
   }
 
-  fn deserialize_bytes<V>(self, _visitor: V) -> Result<V::Value>
+  fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value>
   where
     V: Visitor<'de>,
   {
-    Err(de::Error::custom("deserialize_bytes is unimplemented/unused".to_string()))
+    let buf = match self {
+      Edn::Vector(list) | Edn::List(list) => list
+        .into_iter()
+        .map(|item| {
+          let int = u8::try_from(get_int_from_edn(&item)?);
+          int.map_err(|_| de::Error::custom(format!("can't convert {int:?} into u8")))
+        })
+        .collect::<Result<Vec<_>>>()?,
+      _ => return Err(de::Error::custom(format!("can't convert {self:?} into bytes"))),
+    };
+
+    visitor.visit_byte_buf(buf)
   }
 
   fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value>
