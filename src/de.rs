@@ -42,6 +42,19 @@ fn get_int_from_edn(edn: &Edn<'_>) -> Result<i64> {
   Err(de::Error::custom(format!("cannot convert {edn:?} to i64")))
 }
 
+fn get_bytes_from_edn(edn: &Edn<'_>) -> Result<Vec<u8>> {
+  match edn {
+    Edn::Vector(list) | Edn::List(list) => list
+      .iter()
+      .map(|item| {
+        let int = u8::try_from(get_int_from_edn(item)?);
+        int.map_err(|_| de::Error::custom(format!("can't convert {int:?} into u8")))
+      })
+      .collect(),
+    _ => Err(de::Error::custom(format!("can't convert {edn:?} into bytes"))),
+  }
+}
+
 impl<'de> de::Deserializer<'de> for Edn<'de> {
   type Error = Error;
 
@@ -184,25 +197,16 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
   where
     V: Visitor<'de>,
   {
-    let buf = match self {
-      Edn::Vector(list) | Edn::List(list) => list
-        .into_iter()
-        .map(|item| {
-          let int = u8::try_from(get_int_from_edn(&item)?);
-          int.map_err(|_| de::Error::custom(format!("can't convert {int:?} into u8")))
-        })
-        .collect::<Result<Vec<_>>>()?,
-      _ => return Err(de::Error::custom(format!("can't convert {self:?} into bytes"))),
-    };
-
-    visitor.visit_byte_buf(buf)
+    let buf = get_bytes_from_edn(&self)?;
+    visitor.visit_bytes(&buf)
   }
 
   fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value>
   where
     V: Visitor<'de>,
   {
-    self.deserialize_bytes(visitor)
+    let buf = get_bytes_from_edn(&self)?;
+    visitor.visit_byte_buf(buf)
   }
 
   fn deserialize_option<V>(self, visitor: V) -> Result<V::Value>

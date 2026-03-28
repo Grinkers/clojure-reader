@@ -83,6 +83,42 @@ mod test {
 
   #[test]
   fn byte_buf() {
+    #[derive(Debug, PartialEq)]
+    struct Bytes(Vec<u8>);
+
+    impl<'de> serde::Deserialize<'de> for Bytes {
+      fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+      where
+        D: serde::Deserializer<'de>,
+      {
+        struct BytesVisitor;
+
+        impl<'de> Visitor<'de> for BytesVisitor {
+          type Value = Bytes;
+
+          fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("bytes")
+          }
+
+          fn visit_bytes<E>(self, _v: &[u8]) -> Result<Self::Value, E>
+          where
+            E: de::Error,
+          {
+            Ok(Bytes(_v.to_vec()))
+          }
+
+          fn visit_byte_buf<E>(self, _v: Vec<u8>) -> Result<Self::Value, E>
+          where
+            E: de::Error,
+          {
+            Err(E::custom("expected transient bytes"))
+          }
+        }
+
+        deserializer.deserialize_bytes(BytesVisitor)
+      }
+    }
+
     #[derive(Debug)]
     struct ByteBuf;
 
@@ -112,12 +148,31 @@ mod test {
       }
     }
 
+    assert_eq!(from_str::<Bytes>("[1 2 3]").unwrap(), Bytes(vec![1, 2, 3]));
+    assert_eq!(from_str::<Bytes>("(1 2 3)").unwrap(), Bytes(vec![1, 2, 3]));
     assert!(matches!(from_str::<ByteBuf>("[1 2 3]"), Ok(ByteBuf)));
     assert_eq!(from_str::<Vec<u8>>("[1 2 3]").unwrap(), vec![1, 2, 3]);
     assert_eq!(from_str::<Vec<u8>>("(1 2 3)").unwrap(), vec![1, 2, 3]);
     assert_eq!(
       format!("{:?}", from_str::<Vec<u8>>("[256]")),
       "Err(EdnError { code: Serde(\"can't convert Err(TryFromIntError(())) into u8\"), line: None, column: None, ptr: None })"
+    );
+  }
+
+  #[test]
+  fn borrowed_bytes_are_unsupported() {
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct SomeBytes<'a> {
+      data: &'a [u8],
+    }
+
+    assert_eq!(
+      format!("{:?}", from_str::<SomeBytes<'_>>(r#"{:data [1 2 3]}"#)),
+      "Err(EdnError { code: Serde(\"invalid type: byte array, expected a borrowed byte array\"), line: None, column: None, ptr: None })"
+    );
+    assert_eq!(
+      format!("{:?}", from_str::<SomeBytes<'_>>(r#"{:data (1 2 3)}"#)),
+      "Err(EdnError { code: Serde(\"invalid type: byte array, expected a borrowed byte array\"), line: None, column: None, ptr: None })"
     );
   }
 
