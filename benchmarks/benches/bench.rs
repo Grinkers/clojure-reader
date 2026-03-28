@@ -1,6 +1,8 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use serde::{Deserialize, Serialize};
 
+use clojure_reader::parse::{self, SourceReader};
+
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(untagged)]
 enum Lisp<'a> {
@@ -26,7 +28,14 @@ fn criterion_benchmark(c: &mut Criterion) {
         :data [1 4 2]
         :lisp (car (cdr) cdrrdrdrr (so (many (parens ()))))
     }";
-  c.bench_function("parse", |b| b.iter(|| clojure_reader::edn::read_string(edn)));
+  c.bench_function("parse_as_edn", |b| b.iter(|| parse::parse_as_edn(edn)));
+
+  c.bench_function("parse_node", |b| {
+    b.iter(|| {
+      let mut reader = SourceReader::new(edn);
+      parse::parse(&mut reader)
+    })
+  });
 
   c.bench_function("deserialize", |b| {
     b.iter(|| {

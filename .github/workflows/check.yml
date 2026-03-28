@@ -37,6 +37,7 @@ jobs:
           cargo test --features std --no-default-features --no-fail-fast --target ${{ matrix.target }}
           cargo test --no-default-features --features unstable --test parse --target ${{ matrix.target }}
           cargo test --examples --features unstable --target ${{ matrix.target }}
+          cargo test --example serde --features derive --target ${{ matrix.target }}
 
   build_linux:
     name: Build Linux
@@ -118,6 +119,7 @@ jobs:
           cargo test --features std --no-default-features --no-fail-fast --target ${{ matrix.target }}
           cargo test --no-default-features --features unstable --test parse --target ${{ matrix.target }}
           cargo test --examples --features unstable --target ${{ matrix.target }}
+          cargo test --example serde --features derive --target ${{ matrix.target }}
 
   build_embedded:
     name: Build Embedded
@@ -165,3 +167,4 @@ jobs:
         - run: cargo clippy --no-default-features -- --deny warnings
         - run: cargo clippy --no-default-features --features unstable -- --deny warnings
         - run: cargo clippy --examples --features unstable -- --deny warnings -A clippy::unwrap-used -A clippy::indexing-slicing
+        - run: cargo clippy --example serde --features derive -- --deny warnings -A clippy::unwrap-used -A clippy::indexing-slicing

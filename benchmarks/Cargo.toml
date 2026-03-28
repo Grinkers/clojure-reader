@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-clojure-reader = { path = "..", features = ["derive"] }
+clojure-reader = { path = "..", features = ["derive", "unstable"] }
 
 [dev-dependencies]
 criterion = "0.5"

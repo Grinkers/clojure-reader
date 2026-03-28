@@ -5,9 +5,10 @@
   test_all_features         (shell "cargo test --all-features --no-fail-fast")
   test_no_default_features  (shell "cargo test --features std --no-default-features --no-fail-fast")
   test_unstable_parse       (shell "cargo test --no-default-features --features unstable --test parse")
-  test-examples             (shell "cargo test --examples --features unstable")
+  test-examples-unstable    (shell "cargo test --examples --features unstable")
+  test-example-serde        (shell "cargo test --example serde --features derive")
   cargo-test                {:doc     "Runs all cargo tests"
-                             :depends [test_all_features test_no_default_features test_unstable_parse test-examples]}
+                             :depends [test_all_features test_no_default_features test_unstable_parse test-examples-unstable test-example-serde]}
   cargo-fmt                 {:doc  "Checks cargo fmt"
                              :task (shell "cargo fmt --check")}
   cargo-clippy-all-features {:doc  "Cargo clippy with all features"
@@ -17,7 +18,7 @@
   cargo-clippy-unstable     {:doc  "Cargo clippy with unstable enabled"
                              :task (shell "cargo clippy --no-default-features --features unstable -- --deny warnings")}
   cargo-clippy-examples     {:doc  "Cargo clippy on examples"
-                             :task (shell "cargo clippy --examples --features unstable -- --deny warnings -A clippy::unwrap-used -A clippy::indexing-slicing")}
+                             :task (shell "cargo clippy --examples --features unstable,derive -- --deny warnings -A clippy::unwrap-used -A clippy::indexing-slicing")}
   clippy                    {:doc     "Runs all variations of cargo clippy"
                              :depends [cargo-clippy-all-features cargo-clippy-no-defaults cargo-clippy-unstable cargo-clippy-examples]}
   cov-all-features          {:doc  "Coverage, all features"
@@ -25,7 +26,7 @@
   cov-std-only              {:doc  "Coverage, std only"
                              :task (shell "cargo llvm-cov --no-report --no-default-features --features std")}
   cov-examples              {:doc  "Coverage, examples"
-                             :task (shell "cargo llvm-cov --no-report --examples")}
+                             :task (shell "cargo llvm-cov --no-report --examples --all-features")}
   cov-clean                 {:doc  "Cleans all .profraw files and generated html"
                              :task (shell "cargo llvm-cov clean --workspace")}
   cov-html                  {:doc     "Runs llvm-cov to generate human readable html"
