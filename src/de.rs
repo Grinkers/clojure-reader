@@ -75,11 +75,11 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
         list.reverse();
         Ok(visitor.visit_seq(SeqEdn::new(list))?)
       }
-      Edn::Map(mut map) => {
-        if map == BTreeMap::new() {
+      Edn::Map(map) => {
+        if map.is_empty() {
           visitor.visit_unit()
         } else {
-          visitor.visit_map(MapEdn::new(&mut map))
+          visitor.visit_map(MapEdn::new(map))
         }
       }
       Edn::Set(set) => {
@@ -267,7 +267,7 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
   where
     V: Visitor<'de>,
   {
-    let Edn::Tagged(tag, ref edn) = self else {
+    let Edn::Tagged(tag, edn) = self else {
       return Err(de::Error::custom(format!("can't convert {self:?} into Tagged for enum")));
     };
 
@@ -280,7 +280,7 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
       return Err(de::Error::custom(format!("namespace in {tag} can't be matched to {name}")));
     }
 
-    visitor.visit_enum(EnumEdn::new(edn, tag_second))
+    visitor.visit_enum(EnumEdn::new(*edn, tag_second))
   }
 
   fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value>
@@ -316,17 +316,18 @@ impl<'de> SeqAccess<'de> for SeqEdn<'de> {
   }
 }
 
-struct MapEdn<'a, 'de> {
-  de: &'a mut BTreeMap<Edn<'de>, Edn<'de>>,
+struct MapEdn<'de> {
+  de: BTreeMap<Edn<'de>, Edn<'de>>,
+  pending_value: Option<Edn<'de>>,
 }
 
-impl<'a, 'de> MapEdn<'a, 'de> {
-  const fn new(de: &'a mut BTreeMap<Edn<'de>, Edn<'de>>) -> Self {
-    MapEdn { de }
+impl<'de> MapEdn<'de> {
+  const fn new(de: BTreeMap<Edn<'de>, Edn<'de>>) -> Self {
+    MapEdn { de, pending_value: None }
   }
 }
 
-impl<'de> MapAccess<'de> for MapEdn<'_, 'de> {
+impl<'de> MapAccess<'de> for MapEdn<'de> {
   type Error = Error;
 
   fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>>
@@ -334,10 +335,11 @@ impl<'de> MapAccess<'de> for MapEdn<'_, 'de> {
     K: DeserializeSeed<'de>,
   {
     while let Some((k, _)) = self.de.first_key_value() {
-      // pass over any keys that serde can't handle
       match k {
         Edn::Key(_) | Edn::Symbol(_) | Edn::Str(_) => {
-          return Ok(Some(seed.deserialize(k.clone())?));
+          let (k, v) = self.de.pop_first().expect("key exists, we just checked");
+          self.pending_value = Some(v);
+          return Ok(Some(seed.deserialize(k)?));
         }
         _ => {
           self.de.pop_first();
@@ -351,24 +353,27 @@ impl<'de> MapAccess<'de> for MapEdn<'_, 'de> {
   where
     V: DeserializeSeed<'de>,
   {
-    let (_, v) = self.de.pop_first().expect("kv must exist, because next_key_seed succeeded");
+    // Infallible: serde always calls next_key_seed before next_value_seed.
+    let v = self.pending_value.take().ok_or_else(|| {
+      de::Error::custom("value missing: next_value_seed called without next_key_seed")
+    })?;
     seed.deserialize(v)
   }
 }
 
 #[derive(Debug)]
-struct EnumEdn<'a, 'de> {
-  de: &'a Edn<'de>,
-  variant: &'a str,
+struct EnumEdn<'de> {
+  de: Edn<'de>,
+  variant: &'de str,
 }
 
-impl<'a, 'de> EnumEdn<'a, 'de> {
-  const fn new(de: &'a Edn<'de>, variant: &'a str) -> Self {
+impl<'de> EnumEdn<'de> {
+  const fn new(de: Edn<'de>, variant: &'de str) -> Self {
     EnumEdn { de, variant }
   }
 }
 
-impl<'de> EnumAccess<'de> for EnumEdn<'_, 'de> {
+impl<'de> EnumAccess<'de> for EnumEdn<'de> {
   type Error = Error;
   type Variant = Self;
 
@@ -381,7 +386,7 @@ impl<'de> EnumAccess<'de> for EnumEdn<'_, 'de> {
   }
 }
 
-impl<'de> VariantAccess<'de> for EnumEdn<'_, 'de> {
+impl<'de> VariantAccess<'de> for EnumEdn<'de> {
   type Error = Error;
 
   fn unit_variant(self) -> Result<()> {
@@ -392,14 +397,14 @@ impl<'de> VariantAccess<'de> for EnumEdn<'_, 'de> {
   where
     T: DeserializeSeed<'de>,
   {
-    seed.deserialize(self.de.clone())
+    seed.deserialize(self.de)
   }
 
   fn tuple_variant<V>(self, _len: usize, visitor: V) -> Result<V::Value>
   where
     V: Visitor<'de>,
   {
-    de::Deserializer::deserialize_seq(self.de.clone(), visitor)
+    de::Deserializer::deserialize_seq(self.de, visitor)
   }
 
   fn struct_variant<V>(
@@ -410,6 +415,6 @@ impl<'de> VariantAccess<'de> for EnumEdn<'_, 'de> {
   where
     V: Visitor<'de>,
   {
-    de::Deserializer::deserialize_map(self.de.clone(), visitor)
+    de::Deserializer::deserialize_map(self.de, visitor)
   }
 }

@@ -1,5 +1,6 @@
+use alloc::format;
 use alloc::string::{String, ToString};
-use core::fmt::Display;
+use core::fmt::{Display, Write};
 
 use serde::{Serialize, ser};
 
@@ -27,7 +28,7 @@ pub fn to_string<T>(value: &T) -> Result<String>
 where
   T: Serialize,
 {
-  let mut serializer = Serializer { output: String::new() };
+  let mut serializer = Serializer { output: String::with_capacity(128) };
   value.serialize(&mut serializer)?;
   Ok(serializer.output)
 }
@@ -63,7 +64,11 @@ impl ser::Serializer for &mut Serializer {
   }
 
   fn serialize_i64(self, v: i64) -> Result<()> {
-    self.output += &v.to_string();
+    // Infallible: String::write_fmt never errors, but handle for correctness.
+    self
+      .output
+      .write_fmt(format_args!("{v}"))
+      .map_err(|e| ser::Error::custom(format!("failed to format {v}: {e}")))?;
     Ok(())
   }
 
@@ -80,7 +85,11 @@ impl ser::Serializer for &mut Serializer {
   }
 
   fn serialize_u64(self, v: u64) -> Result<()> {
-    self.output += &v.to_string();
+    // Infallible: String::write_fmt never errors, but handle for correctness.
+    self
+      .output
+      .write_fmt(format_args!("{v}"))
+      .map_err(|e| ser::Error::custom(format!("failed to format {v}: {e}")))?;
     Ok(())
   }
 
@@ -89,7 +98,11 @@ impl ser::Serializer for &mut Serializer {
   }
 
   fn serialize_f64(self, v: f64) -> Result<()> {
-    self.output += &v.to_string();
+    // Infallible: String::write_fmt never errors, but handle for correctness.
+    self
+      .output
+      .write_fmt(format_args!("{v}"))
+      .map_err(|e| ser::Error::custom(format!("failed to format {v}: {e}")))?;
     Ok(())
   }
 
@@ -181,7 +194,10 @@ impl ser::Serializer for &mut Serializer {
     value.serialize(self)
   }
 
-  fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
+  fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq> {
+    if let Some(len) = len {
+      self.output.reserve(len * 16);
+    }
     self.output += "[";
     Ok(self)
   }
@@ -214,7 +230,10 @@ impl ser::Serializer for &mut Serializer {
     Ok(self)
   }
 
-  fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap> {
+  fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap> {
+    if let Some(len) = len {
+      self.output.reserve(len * 32);
+    }
     self.output += "{";
     Ok(self)
   }
