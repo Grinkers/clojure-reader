@@ -7,6 +7,7 @@ on:
     branches: [ "*" ]
 env:
   CARGO_TERM_COLOR: always
+  BABASHKA_VERSION: "1.12.215"
 
 jobs:
   test_linux:
@@ -20,6 +21,7 @@ jobs:
     env:
       RUSTFLAGS: "-D warnings"
       RUSTDOCFLAGS: "-D warnings"
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
     steps:
       - name: Update sources
         run: sudo apt update
@@ -31,13 +33,11 @@ jobs:
         with:
           targets: ${{ matrix.target }}
           toolchain: stable minus 2 releases
+      - uses: turtlequeue/setup-babashka@v1.6.0
+        with:
+          babashka-version: ${{ env.BABASHKA_VERSION }}
       - name: Test gnu
-        run: |
-          cargo test --all-features --no-fail-fast --target ${{ matrix.target }}
-          cargo test --features std --no-default-features --no-fail-fast --target ${{ matrix.target }}
-          cargo test --no-default-features --features unstable --test parse --target ${{ matrix.target }}
-          cargo test --examples --features unstable --target ${{ matrix.target }}
-          cargo test --example serde --features derive --target ${{ matrix.target }}
+        run: bb cargo-test
 
   build_linux:
     name: Build Linux
@@ -53,6 +53,7 @@ jobs:
     env:
       RUSTFLAGS: "-D warnings"
       RUSTDOCFLAGS: "-D warnings"
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
     steps:
       - name: Update sources
         run: sudo apt update
@@ -70,12 +71,11 @@ jobs:
         with:
           targets: ${{ matrix.target }}
           toolchain: stable minus 2 releases
+      - uses: turtlequeue/setup-babashka@v1.6.0
+        with:
+          babashka-version: ${{ env.BABASHKA_VERSION }}
       - name: Build gnu target
-        run: |
-          cargo build --all-features --target ${{ matrix.target }}
-          cargo build --features std --no-default-features
-          cargo build --features std,derive --no-default-features
-          cargo build --no-default-features
+        run: bb cargo-build
 
   build_windows:
     name: Build Windows
@@ -86,17 +86,18 @@ jobs:
     env:
       RUSTFLAGS: "-D warnings"
       RUSTDOCFLAGS: "-D warnings"
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
           toolchain: stable minus 2 releases
+      - uses: turtlequeue/setup-babashka@v1.6.0
+        with:
+          babashka-version: ${{ env.BABASHKA_VERSION }}
       - name: Build Windows
-        run: |
-          cargo build --all-features --target ${{ matrix.target }}
-          cargo build --features std --no-default-features
-          cargo build --no-default-features
+        run: bb cargo-build
 
   test_windows:
     name: Test Windows
@@ -107,19 +108,90 @@ jobs:
     env:
       RUSTFLAGS: "-D warnings"
       RUSTDOCFLAGS: "-D warnings"
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
           toolchain: stable minus 2 releases
+      - uses: turtlequeue/setup-babashka@v1.6.0
+        with:
+          babashka-version: ${{ env.BABASHKA_VERSION }}
       - name: Test Windows
-        run: |
-          cargo test --all-features --no-fail-fast --target ${{ matrix.target }}
-          cargo test --features std --no-default-features --no-fail-fast --target ${{ matrix.target }}
-          cargo test --no-default-features --features unstable --test parse --target ${{ matrix.target }}
-          cargo test --examples --features unstable --target ${{ matrix.target }}
-          cargo test --example serde --features derive --target ${{ matrix.target }}
+        run: bb cargo-test
+
+  build_macos:
+    name: Build macOS
+    runs-on: macos-latest
+    env:
+      RUSTFLAGS: "-D warnings"
+      RUSTDOCFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable minus 2 releases
+      - uses: turtlequeue/setup-babashka@v1.6.0
+        with:
+          babashka-version: ${{ env.BABASHKA_VERSION }}
+      - name: Build macOS
+        run: bb cargo-build
+
+  build_linux_arm64:
+    name: Build Linux ARM64
+    runs-on: ubuntu-24.04-arm
+    env:
+      RUSTFLAGS: "-D warnings"
+      RUSTDOCFLAGS: "-D warnings"
+      CARGO_BUILD_TARGET: aarch64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+          toolchain: stable minus 2 releases
+      - uses: turtlequeue/setup-babashka@v1.6.0
+        with:
+          babashka-version: ${{ env.BABASHKA_VERSION }}
+      - name: Build ARM64
+        run: bb cargo-build
+
+  test_linux_arm64:
+    name: Test Linux ARM64
+    runs-on: ubuntu-24.04-arm
+    env:
+      RUSTFLAGS: "-D warnings"
+      RUSTDOCFLAGS: "-D warnings"
+      CARGO_BUILD_TARGET: aarch64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+          toolchain: stable minus 2 releases
+      - uses: turtlequeue/setup-babashka@v1.6.0
+        with:
+          babashka-version: ${{ env.BABASHKA_VERSION }}
+      - name: Test ARM64
+        run: bb cargo-test
+
+  test_macos:
+    name: Test macOS
+    runs-on: macos-latest
+    env:
+      RUSTFLAGS: "-D warnings"
+      RUSTDOCFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable minus 2 releases
+      - uses: turtlequeue/setup-babashka@v1.6.0
+        with:
+          babashka-version: ${{ env.BABASHKA_VERSION }}
+      - name: Test macOS
+        run: bb cargo-test
 
   build_embedded:
     name: Build Embedded
@@ -152,7 +224,10 @@ jobs:
         - uses: dtolnay/rust-toolchain@stable
           with:
             components: rustfmt
-        - run: cargo fmt --check
+        - uses: turtlequeue/setup-babashka@v1.6.0
+          with:
+            babashka-version: ${{ env.BABASHKA_VERSION }}
+        - run: bb cargo-fmt
 
   clippy_check:
       name: clippy
@@ -163,8 +238,7 @@ jobs:
           with:
             components: clippy
             toolchain: stable minus 2 releases
-        - run: cargo clippy --all-features -- --deny warnings
-        - run: cargo clippy --no-default-features -- --deny warnings
-        - run: cargo clippy --no-default-features --features unstable -- --deny warnings
-        - run: cargo clippy --examples --features unstable -- --deny warnings -A clippy::unwrap-used -A clippy::indexing-slicing
-        - run: cargo clippy --example serde --features derive -- --deny warnings -A clippy::unwrap-used -A clippy::indexing-slicing
+        - uses: turtlequeue/setup-babashka@v1.6.0
+          with:
+            babashka-version: ${{ env.BABASHKA_VERSION }}
+        - run: bb clippy
