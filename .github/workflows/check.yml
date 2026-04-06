@@ -33,7 +33,7 @@ jobs:
         with:
           targets: ${{ matrix.target }}
           toolchain: stable minus 2 releases
-      - uses: turtlequeue/setup-babashka@v1.6.0
+      - uses: turtlequeue/setup-babashka@v1.7.0
         with:
           babashka-version: ${{ env.BABASHKA_VERSION }}
       - name: Test gnu
@@ -71,7 +71,7 @@ jobs:
         with:
           targets: ${{ matrix.target }}
           toolchain: stable minus 2 releases
-      - uses: turtlequeue/setup-babashka@v1.6.0
+      - uses: turtlequeue/setup-babashka@v1.7.0
         with:
           babashka-version: ${{ env.BABASHKA_VERSION }}
       - name: Build gnu target
@@ -93,7 +93,7 @@ jobs:
         with:
           targets: ${{ matrix.target }}
           toolchain: stable minus 2 releases
-      - uses: turtlequeue/setup-babashka@v1.6.0
+      - uses: turtlequeue/setup-babashka@v1.7.0
         with:
           babashka-version: ${{ env.BABASHKA_VERSION }}
       - name: Build Windows
@@ -115,7 +115,7 @@ jobs:
         with:
           targets: ${{ matrix.target }}
           toolchain: stable minus 2 releases
-      - uses: turtlequeue/setup-babashka@v1.6.0
+      - uses: turtlequeue/setup-babashka@v1.7.0
         with:
           babashka-version: ${{ env.BABASHKA_VERSION }}
       - name: Test Windows
@@ -132,7 +132,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable minus 2 releases
-      - uses: turtlequeue/setup-babashka@v1.6.0
+      - uses: turtlequeue/setup-babashka@v1.7.0
         with:
           babashka-version: ${{ env.BABASHKA_VERSION }}
       - name: Build macOS
@@ -151,7 +151,7 @@ jobs:
         with:
           targets: aarch64-unknown-linux-gnu
           toolchain: stable minus 2 releases
-      - uses: turtlequeue/setup-babashka@v1.6.0
+      - uses: turtlequeue/setup-babashka@v1.7.0
         with:
           babashka-version: ${{ env.BABASHKA_VERSION }}
       - name: Build ARM64
@@ -170,7 +170,7 @@ jobs:
         with:
           targets: aarch64-unknown-linux-gnu
           toolchain: stable minus 2 releases
-      - uses: turtlequeue/setup-babashka@v1.6.0
+      - uses: turtlequeue/setup-babashka@v1.7.0
         with:
           babashka-version: ${{ env.BABASHKA_VERSION }}
       - name: Test ARM64
@@ -187,7 +187,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable minus 2 releases
-      - uses: turtlequeue/setup-babashka@v1.6.0
+      - uses: turtlequeue/setup-babashka@v1.7.0
         with:
           babashka-version: ${{ env.BABASHKA_VERSION }}
       - name: Test macOS
@@ -224,7 +224,7 @@ jobs:
         - uses: dtolnay/rust-toolchain@stable
           with:
             components: rustfmt
-        - uses: turtlequeue/setup-babashka@v1.6.0
+        - uses: turtlequeue/setup-babashka@v1.7.0
           with:
             babashka-version: ${{ env.BABASHKA_VERSION }}
         - run: bb cargo-fmt
@@ -238,7 +238,7 @@ jobs:
           with:
             components: clippy
             toolchain: stable minus 2 releases
-        - uses: turtlequeue/setup-babashka@v1.6.0
+        - uses: turtlequeue/setup-babashka@v1.7.0
           with:
             babashka-version: ${{ env.BABASHKA_VERSION }}
         - run: bb clippy
