@@ -1,9 +1,10 @@
 [package]
-name = "clojure-reader"
+name = "clojure-reader-jni"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
+name = "clojure_reader"
 crate-type = ["cdylib"]
 
 [dependencies]
