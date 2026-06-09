@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Update sources
         run: sudo apt update
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v6.0.3
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable minus 2 releases
