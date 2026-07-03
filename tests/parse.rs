@@ -685,6 +685,30 @@ mod test {
     );
 
     assert_eq!(
+      parse::parse(&mut SourceReader::new("#4 2")).unwrap(),
+      Node::no_discards(
+        NodeKind::Tagged(
+          "4",
+          Span(p!(2), p!(3)),
+          Box::new(Node::no_discards(NodeKind::Int(2), Span(p!(4), p!(5))))
+        ),
+        Span(p!(1), p!(5))
+      )
+    );
+
+    assert_eq!(
+      parse::parse(&mut SourceReader::new("#foo/bar/baz nil")).unwrap(),
+      Node::no_discards(
+        NodeKind::Tagged(
+          "foo/bar/baz",
+          Span(p!(2), p!(13)),
+          Box::new(Node::no_discards(NodeKind::Nil, Span(p!(14), p!(17))))
+        ),
+        Span(p!(1), p!(17))
+      )
+    );
+
+    assert_eq!(
       parse::parse(&mut SourceReader::new("#foo #bar #ニャンキャット {:baz #42 \"wut\"}")).unwrap(),
       Node::no_discards(
         NodeKind::Tagged(

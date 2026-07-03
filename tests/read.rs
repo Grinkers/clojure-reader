@@ -255,6 +255,22 @@ fn tagged() {
     Edn::Tagged("inst", Box::new(Edn::Str("1985-04-12T23:20:50.52Z")))
   );
   assert_eq!(edn::read_string(r"#Unit nil").unwrap(), Edn::Tagged("Unit", Box::new(Edn::Nil)));
+  assert_eq!(edn::read_string("#foo/bar nil").unwrap(), Edn::Tagged("foo/bar", Box::new(Edn::Nil)));
+  assert_eq!(edn::read_string("#tag42 nil").unwrap(), Edn::Tagged("tag42", Box::new(Edn::Nil)));
+  assert_eq!(edn::read_string("#foo:bar nil").unwrap(), Edn::Tagged("foo:bar", Box::new(Edn::Nil)));
+  assert_eq!(edn::read_string("#foo#bar nil").unwrap(), Edn::Tagged("foo#bar", Box::new(Edn::Nil)));
+  assert_eq!(
+    edn::read_string("#foo/-bar nil").unwrap(),
+    Edn::Tagged("foo/-bar", Box::new(Edn::Nil))
+  );
+  assert_eq!(
+    edn::read_string("#:foo {}").unwrap(),
+    Edn::Tagged(":foo", Box::new(Edn::Map(BTreeMap::new())))
+  );
+  assert_eq!(
+    edn::read_string("#foo\"bar\"").unwrap(),
+    Edn::Tagged("foo", Box::new(Edn::Str("bar")))
+  );
 
   assert_eq!(
     edn::read_string("#pow2 #pow3 2").unwrap(),
@@ -262,7 +278,7 @@ fn tagged() {
   );
 
   assert_eq!(
-    edn::read_string("#foo #bar #ニャンキャット {:baz #42 \"wut\"}").unwrap(),
+    edn::read_string("#foo #bar #ニャンキャット {:baz #tag42 \"wut\"}").unwrap(),
     Edn::Tagged(
       "foo",
       Box::new(Edn::Tagged(
@@ -271,7 +287,7 @@ fn tagged() {
           "ニャンキャット",
           Box::new(Edn::Map(BTreeMap::from([(
             Edn::Key("baz"),
-            Edn::Tagged("42", Box::new(Edn::Str("wut")))
+            Edn::Tagged("tag42", Box::new(Edn::Str("wut")))
           )])))
         ))
       ))

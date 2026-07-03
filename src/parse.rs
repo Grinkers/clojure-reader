@@ -169,6 +169,10 @@ pub(crate) fn parse_optional_edn(edn: &str) -> Result<(Option<Edn<'_>>, &str), E
 
 const DELIMITERS: [char; 8] = [',', ']', '}', ')', ';', '(', '[', '{'];
 
+fn is_token_boundary(c: char) -> bool {
+  c.is_whitespace() || DELIMITERS.contains(&c) || c == '"'
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Position {
   pub line: usize,
@@ -261,7 +265,7 @@ impl<'e> SourceReader<'e> {
   #[inline(always)]
   fn slurp_literal(&mut self) -> &'e str {
     let token = self.slice[self.read_pos.ptr..]
-      .split(|c: char| c.is_whitespace() || DELIMITERS.contains(&c) || c == '"')
+      .split(is_token_boundary)
       .next()
       .expect("Expected at least an empty slice");
 
@@ -321,7 +325,7 @@ impl<'e> SourceReader<'e> {
 
     loop {
       if let Some(c) = self.peek_next() {
-        if c.is_whitespace() || DELIMITERS.contains(&c) {
+        if is_token_boundary(c) {
           return Ok(&self.slice[starting_ptr..self.read_pos.ptr]);
         }
         let _ = self.nibble_next();
@@ -579,7 +583,7 @@ trait InternalParser<'e> {
     value: Parsed<Self::Item>,
     leading_discards: Vec<Self::Discard>,
     span: Span,
-  ) -> Parsed<Self::Item>;
+  ) -> Result<Parsed<Self::Item>, Error>;
 
   fn discard(
     &self,
@@ -749,12 +753,16 @@ impl<'e> InternalParser<'e> for EdnBuilder {
   fn tag(
     &self,
     tag: &'e str,
-    _tag_span: Span,
+    tag_span: Span,
     value: Parsed<Self::Item>,
     _leading_discards: Vec<Self::Discard>,
     span: Span,
-  ) -> Parsed<Self::Item> {
-    Parsed::new(Edn::Tagged(tag, Box::new(value.item)), span)
+  ) -> Result<Parsed<Self::Item>, Error> {
+    crate::edn::validate_tag(tag, tag_span)?;
+    if tag.starts_with(':') && !matches!(&value.item, Edn::Map(_)) {
+      return Err(Error::from_position(Code::InvalidTag, tag_span.0));
+    }
+    Ok(Parsed::new(Edn::Tagged(tag, Box::new(value.item)), span))
   }
 
   fn discard(
@@ -916,9 +924,9 @@ impl<'e> InternalParser<'e> for NodeBuilder {
     value: Parsed<Self::Item>,
     leading_discards: Vec<Self::Discard>,
     span: Span,
-  ) -> Parsed<Self::Item> {
+  ) -> Result<Parsed<Self::Item>, Error> {
     let value = self.with_leading_discards(value.item, leading_discards);
-    Parsed::new(Node::no_discards(NodeKind::Tagged(tag, tag_span, Box::new(value)), span), span)
+    Ok(Parsed::new(Node::no_discards(NodeKind::Tagged(tag, tag_span, Box::new(value)), span), span))
   }
 
   fn discard(
@@ -1027,7 +1035,7 @@ fn wrap_pending_tags<'e, 'r, B: InternalParser<'e>>(
   walker: &mut Walker<'e, 'r, B>,
   builder: &B,
   mut parsed: Parsed<B::Item>,
-) -> Parsed<B::Item> {
+) -> Result<Parsed<B::Item>, Error> {
   while matches!(walker.stack.last(), Some(ParseContext { kind: ContextKind::Tag(..), .. })) {
     let ParseContext { kind: ContextKind::Tag(tag, tag_span, pos_start), discards } =
       walker.pop_context().expect("tag context should exist")
@@ -1035,10 +1043,10 @@ fn wrap_pending_tags<'e, 'r, B: InternalParser<'e>>(
       unreachable!("tag context should be on top of the stack");
     };
 
-    parsed = builder.tag(tag, tag_span, parsed, discards, walker.span_from(pos_start));
+    parsed = builder.tag(tag, tag_span, parsed, discards, walker.span_from(pos_start))?;
   }
 
-  parsed
+  Ok(parsed)
 }
 
 fn under_discard<'e, B: InternalParser<'e>>(walker: &Walker<'e, '_, B>) -> bool {
@@ -1050,7 +1058,7 @@ fn complete_value<'e, 'r, B: InternalParser<'e>>(
   builder: &B,
   parsed: Parsed<B::Item>,
 ) -> Result<Option<B::Item>, Error> {
-  let parsed = wrap_pending_tags(walker, builder, parsed);
+  let parsed = wrap_pending_tags(walker, builder, parsed)?;
 
   if walker.stack_len() == 1 {
     let leading_discards =

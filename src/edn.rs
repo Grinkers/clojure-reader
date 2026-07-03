@@ -46,6 +46,39 @@ pub enum Edn<'e> {
   Nil,
 }
 
+const SYMBOL_SPECIAL_CHARS: &str = ".*+!-_?$%&=<>:#";
+
+fn is_symbol_char(c: char) -> bool {
+  c.is_alphanumeric() || SYMBOL_SPECIAL_CHARS.contains(c)
+}
+
+fn is_symbol_start(c: char) -> bool {
+  !c.is_numeric() && !matches!(c, ':' | '#') && is_symbol_char(c)
+}
+
+fn valid_symbol_part(part: &str) -> bool {
+  let mut chars = part.chars();
+  let Some(first) = chars.next() else { return false };
+  let second = chars.clone().next();
+
+  is_symbol_start(first)
+    && !(matches!(first, '-' | '+' | '.') && second.is_some_and(char::is_numeric))
+    && chars.all(is_symbol_char)
+}
+
+pub(crate) fn validate_tag(tag: &str, tag_span: parse::Span) -> error::Result<()> {
+  let tag = tag.strip_prefix(':').unwrap_or(tag);
+  let valid = tag.chars().next().is_some_and(char::is_alphabetic)
+    && match tag.split_once('/') {
+      Some((prefix, name)) => {
+        !name.contains('/') && valid_symbol_part(prefix) && valid_symbol_part(name)
+      }
+      None => valid_symbol_part(tag),
+    };
+
+  if valid { Ok(()) } else { Err(error::Error::from_position(error::Code::InvalidTag, tag_span.0)) }
+}
+
 impl<'e> TryFrom<parse::Node<'e>> for Edn<'e> {
   type Error = error::Error;
   /// Elaborates a concrete [`Node`](parse::Node) into an abstract resolved [`Edn`]
@@ -63,20 +96,13 @@ impl<'e> TryFrom<parse::Node<'e>> for Edn<'e> {
   /// }
   /// ```
   ///
-  /// # Return value
-  ///
-  /// This function returns:
-  ///
-  /// - `Err(err)` if there were any [duplicate map keys][HMDK] or [duplicate set items][SDK]
-  /// - `Ok(edn)` otherwise
-  ///
   /// # Errors
   ///
   /// See [`crate::error::Error`].
-  /// Always returns either [`Code::HashMapDuplicateKey`][HMDK] or [`Code::SetDuplicateKey`][SDK].
   ///
   /// [HMDK]: error::Code::HashMapDuplicateKey
   /// [SDK]: error::Code::SetDuplicateKey
+  /// [IT]: error::Code::InvalidTag
   fn try_from(parse::Node { kind: value, .. }: parse::Node<'e>) -> error::Result<Self> {
     use error::{Code, Error, Result};
     use parse::NodeKind;
@@ -112,7 +138,13 @@ impl<'e> TryFrom<parse::Node<'e>> for Edn<'e> {
       NodeKind::Symbol(symbol) => Edn::Symbol(symbol),
       NodeKind::Str(str) => Edn::Str(str),
       NodeKind::Int(int) => Edn::Int(int),
-      NodeKind::Tagged(tag, _, node) => Edn::Tagged(tag, Box::new((*node).try_into()?)),
+      NodeKind::Tagged(tag, tag_span, node) => {
+        validate_tag(tag, tag_span)?;
+        if tag.starts_with(':') && !matches!(&node.kind, NodeKind::Map(..)) {
+          return Err(Error::from_position(Code::InvalidTag, tag_span.0));
+        }
+        Edn::Tagged(tag, Box::new((*node).try_into()?))
+      }
       #[cfg(feature = "floats")]
       NodeKind::Double(double) => Edn::Double(double),
       NodeKind::Rational(rational) => Edn::Rational(rational),

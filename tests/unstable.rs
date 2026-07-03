@@ -36,6 +36,35 @@ mod test {
   }
 
   #[test]
+  fn node_try_into_edn_reports_invalid_tags() {
+    let node = parse::parse(&mut SourceReader::new("#4 2")).unwrap();
+    let err = Edn::try_from(node).unwrap_err();
+
+    assert_eq!(err.code, Code::InvalidTag);
+    assert_eq!(err.line, Some(1));
+    assert_eq!(err.column, Some(2));
+    assert_eq!(err.ptr, Some(1));
+
+    for input in [
+      "#foo/bar/baz nil",
+      "#foo/ nil",
+      "#foo//bar nil",
+      "#foo/42 nil",
+      "#foo/:bar nil",
+      "#foo/#bar nil",
+      "#foo/-42 nil",
+      "#foo/+42 nil",
+      "#foo/.42 nil",
+      "#foo|bar nil",
+      "#foo@bar nil",
+      "#:foo 1",
+    ] {
+      let node = parse::parse(&mut SourceReader::new(input)).unwrap();
+      assert_eq!(Edn::try_from(node).unwrap_err().code, Code::InvalidTag);
+    }
+  }
+
+  #[test]
   fn node_try_into_edn_covers_remaining_variants() {
     let node = Node::no_discards(
       NodeKind::List(

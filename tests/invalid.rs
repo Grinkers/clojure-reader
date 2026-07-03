@@ -16,10 +16,25 @@ fn invalid_edn() {
   assert!(edn::read_string("1/0").is_err());
   assert!(edn::read_string("1/-2").is_err());
   assert!(edn::read_string("1/+2").is_err());
+  assert!(edn::read_string("1İr10").is_err());
   assert!(edn::read_string("#[]").is_err());
   assert!(edn::read_string("# tag nil").is_err());
   assert!(edn::read_string("# :foo{:bar 1}").is_err());
-  assert!(edn::read_string("1İr10").is_err());
+  assert!(edn::read_string("#4 2").is_err());
+  assert!(edn::read_string("#42 \"wut\"").is_err());
+  assert!(edn::read_string(r#"#"regex" nil"#).is_err());
+  assert!(edn::read_string("#foo/bar/baz nil").is_err());
+  assert!(edn::read_string("#foo/ nil").is_err());
+  assert!(edn::read_string("#foo//bar nil").is_err());
+  assert!(edn::read_string("#foo/42 nil").is_err());
+  assert!(edn::read_string("#foo/:bar nil").is_err());
+  assert!(edn::read_string("#foo/#bar nil").is_err());
+  assert!(edn::read_string("#foo/-42 nil").is_err());
+  assert!(edn::read_string("#foo/+42 nil").is_err());
+  assert!(edn::read_string("#foo/.42 nil").is_err());
+  assert!(edn::read_string("#foo|bar nil").is_err());
+  assert!(edn::read_string("#foo@bar nil").is_err());
+  assert!(edn::read_string("#:foo 1").is_err());
 
   let edn = "{
               :cat \"猫\"
