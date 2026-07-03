@@ -40,6 +40,26 @@ mod test {
   }
 
   #[test]
+  fn strings_are_not_escaped() {
+    let value = "a\"b\\c\n\r\t\u{0001}";
+    assert_eq!(to_string(&value).unwrap(), alloc::format!("\"{value}\""));
+  }
+
+  #[test]
+  fn sequence_separator_uses_state() {
+    assert_eq!(to_string(&vec!['[', 'x']).unwrap(), r#"[\[ \x]"#);
+  }
+
+  #[test]
+  fn large_unsigned_values() {
+    #[cfg(feature = "arbitrary-nums")]
+    assert_eq!(to_string(&u64::MAX).unwrap(), "18446744073709551615N");
+
+    #[cfg(not(feature = "arbitrary-nums"))]
+    assert!(to_string(&u64::MAX).is_err());
+  }
+
+  #[test]
   fn test_struct() {
     #[derive(Serialize)]
     struct Test {

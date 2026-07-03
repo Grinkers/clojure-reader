@@ -1,5 +1,6 @@
 use alloc::format;
 use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use core::fmt::{Display, Write};
 
 use serde::{Serialize, ser};
@@ -9,6 +10,36 @@ use crate::error::{Code, Error, Result};
 #[derive(Debug)]
 pub struct Serializer {
   output: String,
+  compound_is_empty: Vec<bool>,
+}
+
+impl Serializer {
+  fn start_compound(&mut self, opener: &str) {
+    self.output += opener;
+    self.compound_is_empty.push(true);
+  }
+
+  fn write_separator(&mut self, separator: &str) -> Result<()> {
+    let compound_is_empty = self
+      .compound_is_empty
+      .last_mut()
+      .ok_or_else(|| ser::Error::custom("serializer compound state missing"))?;
+    if *compound_is_empty {
+      *compound_is_empty = false;
+    } else {
+      self.output += separator;
+    }
+    Ok(())
+  }
+
+  fn end_compound(&mut self, closer: &str) -> Result<()> {
+    self
+      .compound_is_empty
+      .pop()
+      .ok_or_else(|| ser::Error::custom("serializer compound state missing"))?;
+    self.output += closer;
+    Ok(())
+  }
 }
 
 impl ser::Error for Error {
@@ -28,7 +59,8 @@ pub fn to_string<T>(value: &T) -> Result<String>
 where
   T: Serialize,
 {
-  let mut serializer = Serializer { output: String::with_capacity(128) };
+  let mut serializer =
+    Serializer { output: String::with_capacity(128), compound_is_empty: Vec::new() };
   value.serialize(&mut serializer)?;
   Ok(serializer.output)
 }
@@ -85,12 +117,26 @@ impl ser::Serializer for &mut Serializer {
   }
 
   fn serialize_u64(self, v: u64) -> Result<()> {
-    // Infallible: String::write_fmt never errors, but handle for correctness.
-    self
-      .output
-      .write_fmt(format_args!("{v}"))
-      .map_err(|e| ser::Error::custom(format!("failed to format {v}: {e}")))?;
-    Ok(())
+    if let Ok(v) = i64::try_from(v) {
+      return self.serialize_i64(v);
+    }
+
+    #[cfg(not(feature = "arbitrary-nums"))]
+    {
+      Err(ser::Error::custom(format!(
+        "can't serialize {v} as a round-trippable EDN integer without arbitrary-nums"
+      )))
+    }
+
+    #[cfg(feature = "arbitrary-nums")]
+    {
+      // Infallible: String::write_fmt never errors, but handle for correctness.
+      self
+        .output
+        .write_fmt(format_args!("{v}N"))
+        .map_err(|e| ser::Error::custom(format!("failed to format {v}: {e}")))?;
+      Ok(())
+    }
   }
 
   fn serialize_f32(self, v: f32) -> Result<()> {
@@ -198,12 +244,12 @@ impl ser::Serializer for &mut Serializer {
     if let Some(len) = len {
       self.output.reserve(len * 16);
     }
-    self.output += "[";
+    self.start_compound("[");
     Ok(self)
   }
 
   fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple> {
-    self.output += "[";
+    self.start_compound("[");
     Ok(self)
   }
 
@@ -226,7 +272,8 @@ impl ser::Serializer for &mut Serializer {
     self.output += name;
     self.output += "/";
     self.output += variant;
-    self.output += " [";
+    self.output += " ";
+    self.start_compound("[");
     Ok(self)
   }
 
@@ -234,7 +281,7 @@ impl ser::Serializer for &mut Serializer {
     if let Some(len) = len {
       self.output.reserve(len * 32);
     }
-    self.output += "{";
+    self.start_compound("{");
     Ok(self)
   }
 
@@ -253,7 +300,8 @@ impl ser::Serializer for &mut Serializer {
     self.output += name;
     self.output += "/";
     self.output += variant;
-    self.output += " {";
+    self.output += " ";
+    self.start_compound("{");
     Ok(self)
   }
 }
@@ -266,15 +314,12 @@ impl ser::SerializeSeq for &mut Serializer {
   where
     T: ?Sized + Serialize,
   {
-    if !self.output.ends_with('[') {
-      self.output += " ";
-    }
+    self.write_separator(" ")?;
     value.serialize(&mut **self)
   }
 
   fn end(self) -> Result<()> {
-    self.output += "]";
-    Ok(())
+    self.end_compound("]")
   }
 }
 
@@ -286,15 +331,12 @@ impl ser::SerializeTuple for &mut Serializer {
   where
     T: ?Sized + Serialize,
   {
-    if !self.output.ends_with('[') {
-      self.output += " ";
-    }
+    self.write_separator(" ")?;
     value.serialize(&mut **self)
   }
 
   fn end(self) -> Result<()> {
-    self.output += "]";
-    Ok(())
+    self.end_compound("]")
   }
 }
 
@@ -306,15 +348,12 @@ impl ser::SerializeTupleStruct for &mut Serializer {
   where
     T: ?Sized + Serialize,
   {
-    if !self.output.ends_with('[') {
-      self.output += " ";
-    }
+    self.write_separator(" ")?;
     value.serialize(&mut **self)
   }
 
   fn end(self) -> Result<()> {
-    self.output += "]";
-    Ok(())
+    self.end_compound("]")
   }
 }
 
@@ -326,15 +365,12 @@ impl ser::SerializeTupleVariant for &mut Serializer {
   where
     T: ?Sized + Serialize,
   {
-    if !self.output.ends_with('[') {
-      self.output += " ";
-    }
+    self.write_separator(" ")?;
     value.serialize(&mut **self)
   }
 
   fn end(self) -> Result<()> {
-    self.output += "]";
-    Ok(())
+    self.end_compound("]")
   }
 }
 
@@ -346,9 +382,7 @@ impl ser::SerializeMap for &mut Serializer {
   where
     T: ?Sized + Serialize,
   {
-    if !self.output.ends_with('{') {
-      self.output += ", ";
-    }
+    self.write_separator(", ")?;
 
     key.serialize(&mut **self)
   }
@@ -362,8 +396,7 @@ impl ser::SerializeMap for &mut Serializer {
   }
 
   fn end(self) -> Result<()> {
-    self.output += "}";
-    Ok(())
+    self.end_compound("}")
   }
 }
 
@@ -375,9 +408,7 @@ impl ser::SerializeStruct for &mut Serializer {
   where
     T: ?Sized + Serialize,
   {
-    if !self.output.ends_with('{') {
-      self.output += ", ";
-    }
+    self.write_separator(", ")?;
     self.output += ":";
     self.output += key;
     self.output += " ";
@@ -385,8 +416,7 @@ impl ser::SerializeStruct for &mut Serializer {
   }
 
   fn end(self) -> Result<()> {
-    self.output += "}";
-    Ok(())
+    self.end_compound("}")
   }
 }
 
@@ -398,9 +428,7 @@ impl ser::SerializeStructVariant for &mut Serializer {
   where
     T: ?Sized + Serialize,
   {
-    if !self.output.ends_with('{') {
-      self.output += ", ";
-    }
+    self.write_separator(", ")?;
     self.output += ":";
     self.output += key;
     self.output += " ";
@@ -408,7 +436,6 @@ impl ser::SerializeStructVariant for &mut Serializer {
   }
 
   fn end(self) -> Result<()> {
-    self.output += "}";
-    Ok(())
+    self.end_compound("}")
   }
 }

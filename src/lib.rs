@@ -10,14 +10,14 @@ extern crate std;
 pub mod edn;
 pub mod error;
 
-#[cfg(feature = "derive")]
+#[cfg(feature = "serde")]
 pub use de::from_str;
-#[cfg(feature = "derive")]
+#[cfg(feature = "serde")]
 pub use ser::to_string;
 
-#[cfg(feature = "derive")]
+#[cfg(feature = "serde")]
 pub mod de;
-#[cfg(feature = "derive")]
+#[cfg(feature = "serde")]
 pub mod ser;
 
 #[cfg(feature = "unstable")]

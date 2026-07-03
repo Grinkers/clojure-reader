@@ -4,7 +4,8 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::fmt::Display;
 
-use crate::edn::{self, Edn};
+use crate::edn::Edn;
+use crate::parse;
 
 use serde::de::{
   self, DeserializeSeed, EnumAccess, IntoDeserializer, MapAccess, SeqAccess, VariantAccess, Visitor,
@@ -23,8 +24,25 @@ pub fn from_str<'a, T>(s: &'a str) -> Result<T>
 where
   T: Deserialize<'a>,
 {
-  let edn = edn::read_string(s)?;
+  let (edn, remaining) = parse::parse_as_edn(s)?;
   let t = T::deserialize(edn)?;
+
+  let mut remaining = remaining;
+  loop {
+    remaining = remaining.trim_start_matches(|c: char| c == ',' || c.is_whitespace());
+
+    let Some(comment) = remaining.strip_prefix(';') else {
+      break;
+    };
+
+    let Some(comment_end) = comment.find(['\n', '\r']) else {
+      return Ok(t);
+    };
+    remaining = &comment[comment_end..];
+  }
+  if !remaining.is_empty() {
+    return Err(de::Error::custom("trailing input"));
+  }
   Ok(t)
 }
 
@@ -75,13 +93,7 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
         list.reverse();
         Ok(visitor.visit_seq(SeqEdn::new(list))?)
       }
-      Edn::Map(map) => {
-        if map.is_empty() {
-          visitor.visit_unit()
-        } else {
-          visitor.visit_map(MapEdn::new(map))
-        }
-      }
+      Edn::Map(map) => visitor.visit_map(MapEdn::new(map)),
       Edn::Set(set) => {
         let mut s: Vec<Edn<'_>> = set.into_iter().collect();
         s.reverse();
@@ -93,7 +105,15 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
   }
 
   forward_to_deserialize_any! {
-    bool i64 f64 char str unit map ignored_any seq tuple_struct
+    bool i64 f64 char str map seq tuple_struct
+  }
+
+  fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value>
+  where
+    V: Visitor<'de>,
+  {
+    let _ = self;
+    visitor.visit_unit()
   }
 
   fn deserialize_i8<V>(self, visitor: V) -> Result<V::Value>
@@ -166,6 +186,14 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
   where
     V: Visitor<'de>,
   {
+    #[cfg(feature = "arbitrary-nums")]
+    if let Edn::BigInt(i) = &self {
+      return match u64::try_from(i.clone()) {
+        Ok(i) => visitor.visit_u64(i),
+        Err(err) => Err(de::Error::custom(format!("can't convert {err:?} into u64"))),
+      };
+    }
+
     let int = u64::try_from(get_int_from_edn(&self)?);
     int.map_or_else(
       |_| Err(de::Error::custom(format!("can't convert {int:?} into u64"))),
@@ -223,6 +251,17 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
     V: Visitor<'de>,
   {
     if self == Edn::Nil { visitor.visit_none() } else { visitor.visit_some(self) }
+  }
+
+  fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value>
+  where
+    V: Visitor<'de>,
+  {
+    match self {
+      Edn::Nil => visitor.visit_unit(),
+      Edn::Map(map) if map.is_empty() => visitor.visit_unit(),
+      other => Err(de::Error::custom(format!("can't convert {other:?} into unit"))),
+    }
   }
 
   fn deserialize_unit_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value>
@@ -287,7 +326,10 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
   where
     V: Visitor<'de>,
   {
-    self.deserialize_str(visitor)
+    match self {
+      Edn::Key(k) | Edn::Str(k) | Edn::Symbol(k) => visitor.visit_borrowed_str(k),
+      other => visitor.visit_string(other.to_string()),
+    }
   }
 }
 
@@ -334,17 +376,9 @@ impl<'de> MapAccess<'de> for MapEdn<'de> {
   where
     K: DeserializeSeed<'de>,
   {
-    while let Some((k, _)) = self.de.first_key_value() {
-      match k {
-        Edn::Key(_) | Edn::Symbol(_) | Edn::Str(_) => {
-          let (k, v) = self.de.pop_first().expect("key exists, we just checked");
-          self.pending_value = Some(v);
-          return Ok(Some(seed.deserialize(k)?));
-        }
-        _ => {
-          self.de.pop_first();
-        }
-      }
+    if let Some((k, v)) = self.de.pop_first() {
+      self.pending_value = Some(v);
+      return Ok(Some(seed.deserialize(k)?));
     }
     Ok(None)
   }

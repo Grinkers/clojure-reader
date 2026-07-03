@@ -1,4 +1,4 @@
-use clojure_reader::edn;
+use clojure_reader::edn::{self, Edn};
 
 #[macro_export]
 macro_rules! display {
@@ -29,6 +29,12 @@ fn empty() {
 #[test]
 fn chars() {
   display!("[\\newline 1 \\return \\a \\space cat \\tab]");
+}
+
+#[test]
+fn strings_are_not_escaped() {
+  let value = "a\"b\\c\n\r\t\u{0001}";
+  assert_eq!(format!("{}", Edn::Str(value)), format!("\"{value}\""));
 }
 
 #[test]

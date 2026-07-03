@@ -3,6 +3,7 @@ mod test {
   extern crate alloc;
 
   use alloc::borrow::ToOwned;
+  use alloc::collections::BTreeMap;
   use alloc::string::{String, ToString};
   use alloc::vec::Vec;
   use core::fmt;
@@ -39,6 +40,43 @@ mod test {
 
     let res = from_str::<Test>(r#"{:maybe-int 42, 42 "neko", :maybe-str "gato"}"#).unwrap();
     assert_eq!(res, Test { maybe_int: Some(42), maybe_str: Some("gato".to_string()) });
+  }
+
+  #[test]
+  fn rejects_trailing_input() {
+    assert_eq!(42, from_str::<u8>("42 , \n").unwrap());
+    assert_eq!(42, from_str::<u8>("42 ; comment").unwrap());
+    assert_eq!(42, from_str::<u8>("42 ; comment\n").unwrap());
+    assert!(from_str::<u8>("42 43").is_err());
+    assert!(from_str::<u8>("42 ; comment\n43").is_err());
+  }
+
+  #[test]
+  fn ignored_struct_fields_accept_any_edn_value() {
+    #[derive(Deserialize, PartialEq, Debug)]
+    struct Cat {
+      known: u8,
+    }
+
+    assert_eq!(Cat { known: 3 }, from_str::<Cat>(r#"{1 #foo/bar 2, :known 3}"#).unwrap());
+  }
+
+  #[test]
+  fn map_deserialization_handles_empty_and_numeric_keys() {
+    assert_eq!(from_str::<BTreeMap<String, String>>("{}").unwrap(), BTreeMap::new());
+    assert_eq!(
+      from_str::<BTreeMap<i64, String>>(r#"{1 "a" 2 "b"}"#).unwrap(),
+      BTreeMap::from([(1, "a".to_owned()), (2, "b".to_owned())])
+    );
+  }
+
+  #[test]
+  fn large_unsigned_values() {
+    #[cfg(feature = "arbitrary-nums")]
+    assert_eq!(from_str::<u64>("18446744073709551615N").unwrap(), u64::MAX);
+
+    #[cfg(not(feature = "arbitrary-nums"))]
+    assert!(from_str::<u64>("18446744073709551615").is_err());
   }
 
   #[test]
@@ -210,6 +248,28 @@ mod test {
   }
 
   #[test]
+  fn empty_map_uses_struct_defaults() {
+    #[derive(Deserialize, PartialEq, Debug)]
+    #[serde(default, rename_all = "kebab-case")]
+    struct CatDefaults {
+      nap_spots: u8,
+      favorite_treat: String,
+    }
+
+    impl Default for CatDefaults {
+      fn default() -> Self {
+        Self { nap_spots: 9, favorite_treat: "tuna".to_owned() }
+      }
+    }
+
+    assert_eq!(CatDefaults::default(), from_str::<CatDefaults>("{}").unwrap());
+    assert_eq!(
+      CatDefaults { nap_spots: 2, favorite_treat: "tuna".to_owned() },
+      from_str::<CatDefaults>(r#"{:nap-spots 2}"#).unwrap()
+    );
+  }
+
+  #[test]
   fn new_type() {
     #[derive(Deserialize, PartialEq, Debug)]
     struct Meters(i64);
@@ -271,6 +331,7 @@ mod test {
   }
 
   #[test]
+  #[cfg(feature = "floats")]
   fn complex_struct() {
     #[derive(Deserialize, PartialEq, Debug)]
     struct Nums {
