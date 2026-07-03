@@ -332,6 +332,33 @@ mod test {
   }
 
   #[test]
+  fn internally_tagged_enum() {
+    #[derive(Deserialize, PartialEq, Debug)]
+    #[serde(tag = "cafe", rename_all = "kebab-case", rename_all_fields = "kebab-case")]
+    enum CatCafe {
+      BeforeOpening,
+      HerdingKittens { count: u8 },
+      ServingTreats { bowls: u8, favorite_flavor: String },
+      NapTime { sunny_spots: u8 },
+    }
+
+    assert_eq!(CatCafe::BeforeOpening, from_str::<CatCafe>(r#"{:cafe "before-opening"}"#).unwrap());
+    assert_eq!(
+      CatCafe::HerdingKittens { count: 7 },
+      from_str::<CatCafe>(r#"{:cafe "herding-kittens", :count 7}"#).unwrap()
+    );
+    assert_eq!(
+      CatCafe::ServingTreats { bowls: 3, favorite_flavor: "salmon".to_string() },
+      from_str::<CatCafe>(r#"{:cafe "serving-treats", :bowls 3, :favorite-flavor "salmon"}"#)
+        .unwrap()
+    );
+    assert_eq!(
+      CatCafe::NapTime { sunny_spots: 2 },
+      from_str::<CatCafe>(r#"{:cafe "nap-time", :sunny-spots 2}"#).unwrap()
+    );
+  }
+
+  #[test]
   fn serde_errors() {
     assert_eq!(
       format!("{:?}", from_str::<String>(r#"#E/Tuple [4/2]"#)),

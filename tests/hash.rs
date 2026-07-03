@@ -38,7 +38,11 @@ mod test {
         :lisp (())
     }";
 
-    let (edn1, edn2) = (edn::read_string(edn1).unwrap(), edn::read_string(edn2).unwrap());
+    let (edn1, edn2, edn_notsame) = (
+      edn::read_string(edn1).unwrap(),
+      edn::read_string(edn2).unwrap(),
+      edn::read_string(edn_notsame).unwrap(),
+    );
 
     assert_eq!(calculate_hash(&edn1), calculate_hash(&edn2));
     assert_ne!(calculate_hash(&edn1), calculate_hash(&edn_notsame));

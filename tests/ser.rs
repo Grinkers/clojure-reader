@@ -120,6 +120,33 @@ mod test {
   }
 
   #[test]
+  fn internally_tagged_enum() {
+    #[derive(Serialize)]
+    #[serde(tag = "cafe", rename_all = "kebab-case", rename_all_fields = "kebab-case")]
+    enum CatCafe {
+      BeforeOpening,
+      HerdingKittens { count: u8 },
+      ServingTreats { bowls: u8, favorite_flavor: String },
+      NapTime { sunny_spots: u8 },
+    }
+
+    assert_eq!(r#"{:cafe "before-opening"}"#, to_string(&CatCafe::BeforeOpening).unwrap());
+    assert_eq!(
+      r#"{:cafe "herding-kittens", :count 7}"#,
+      to_string(&CatCafe::HerdingKittens { count: 7 }).unwrap()
+    );
+    assert_eq!(
+      r#"{:cafe "serving-treats", :bowls 3, :favorite-flavor "salmon"}"#,
+      to_string(&CatCafe::ServingTreats { bowls: 3, favorite_flavor: "salmon".to_string() })
+        .unwrap()
+    );
+    assert_eq!(
+      r#"{:cafe "nap-time", :sunny-spots 2}"#,
+      to_string(&CatCafe::NapTime { sunny_spots: 2 }).unwrap()
+    );
+  }
+
+  #[test]
   fn bytes() {
     #[derive(Serialize)]
     struct Refs<'a> {

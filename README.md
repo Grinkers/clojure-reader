@@ -24,7 +24,7 @@
 
 # Optional Features
 
-   The following features are not enabled by default. To enable them all, use with
+   The following features are not enabled by default. To enable all stable optional features, use
    ```toml
    clojure-reader = { features = ["full"] }
    ```
