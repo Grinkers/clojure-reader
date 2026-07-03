@@ -91,6 +91,10 @@ mod test {
       )
     );
     assert_eq!(
+      edn::read_string("9223372036854775808").unwrap(),
+      Edn::BigInt(num_bigint::BigInt::parse_bytes(b"9223372036854775808", 10).unwrap())
+    );
+    assert_eq!(
       edn::read_string("-6185933704010480393063595516995722243717761522869573N").unwrap(),
       Edn::BigInt(
         num_bigint::BigInt::parse_bytes(
@@ -119,11 +123,21 @@ mod test {
       Edn::Map(BTreeMap::from([
         (Edn::Key("cat"), Edn::Str("猫")),
         (Edn::Key("num"), Edn::Int(-36930)),
-        (Edn::Double((40.42).into()), Edn::Str("forty dot forty-two")),
+        (read_big_float("40.42"), Edn::Str("forty dot forty-two")),
         (Edn::Map(BTreeMap::from([(Edn::Key("foo"), Edn::Str("bar"))])), Edn::Str("foobar")),
         (Edn::Key("r"), Edn::Rational((42, 4242))),
         (Edn::Key("lisp"), Edn::List(vec![Edn::List(vec![])])),
       ]))
     );
+  }
+
+  #[cfg(feature = "floats")]
+  fn read_big_float(s: &str) -> Edn<'_> {
+    Edn::Double(s.parse::<f64>().unwrap().into())
+  }
+
+  #[cfg(not(feature = "floats"))]
+  fn read_big_float(s: &str) -> Edn<'_> {
+    Edn::BigDec(bigdecimal::BigDecimal::parse_bytes(s.as_bytes(), 10).unwrap())
   }
 }

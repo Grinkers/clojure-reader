@@ -98,14 +98,15 @@ fn sets() {
 #[test]
 fn numbers() {
   assert_eq!(edn::read_string("43/5143").unwrap(), Edn::Rational((43, 5143)));
+  assert_eq!(edn::read_string("42 43").unwrap(), Edn::Int(42));
+  assert_eq!(edn::read_string("-9223372036854775808").unwrap(), Edn::Int(i64::MIN));
   assert_eq!(
     edn::read_string("-1190128294822145183/3023870813131455535").unwrap(),
     Edn::Rational((-1190128294822145183, 3023870813131455535))
   );
-  assert_eq!(
-    edn::read_string("-2477641376863858799/-8976013293400652448").unwrap(),
-    Edn::Rational((-2477641376863858799, -8976013293400652448))
-  );
+
+  #[cfg(not(feature = "arbitrary-nums"))]
+  assert!(edn::read_string("9223372036854775808").is_err());
 }
 
 #[test]

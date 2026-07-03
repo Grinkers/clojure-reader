@@ -1222,6 +1222,19 @@ fn parse_char(lit: &str) -> Result<char, Code> {
 }
 
 #[inline]
+fn signed_int_from_slice(slice: &str, radix: u8, polarity: i8) -> Option<i64> {
+  let magnitude = u64::from_str_radix(slice, radix.into()).ok()?;
+  if polarity < 0 {
+    if magnitude == (i64::MAX as u64) + 1 {
+      return Some(i64::MIN);
+    }
+    i64::try_from(magnitude).ok().map(|n| -n)
+  } else {
+    i64::try_from(magnitude).ok()
+  }
+}
+
+#[inline]
 fn parse_number(lit: &str) -> Result<Atom<'_>, Code> {
   let mut chars = lit.chars().peekable();
   let (number, radix, polarity) = {
@@ -1241,10 +1254,10 @@ fn parse_number(lit: &str) -> Result<Atom<'_>, Code> {
 
     let mut number = &lit[num_ptr_start..];
 
-    if number.to_lowercase().starts_with("0x") {
+    if number.get(..2).is_some_and(|prefix| prefix.eq_ignore_ascii_case("0x")) {
       number = &number[2..];
       (number, 16, polarity)
-    } else if let Some(index) = number.to_lowercase().find('r') {
+    } else if let Some(index) = number.find(['r', 'R']) {
       let radix = (number[0..index]).parse::<u8>();
 
       match radix {
@@ -1266,17 +1279,21 @@ fn parse_number(lit: &str) -> Result<Atom<'_>, Code> {
     }
   };
 
-  if let Ok(n) = i64::from_str_radix(number, radix.into()) {
-    return Ok(Atom::Int(n * i64::from(polarity)));
+  if let Some(n) = signed_int_from_slice(number, radix, polarity) {
+    return Ok(Atom::Int(n));
   }
   if radix == 10
     && let Some(index) = number.find('/')
   {
     let (num, den) = number.split_at(index);
     let num = num.parse::<i64>();
-    let den = den[1..].parse::<i64>();
+    let den = &den[1..];
+    let den_value = den.parse::<i64>();
 
-    if let (Ok(n), Ok(d)) = (num, den) {
+    if let (Ok(n), Ok(d)) = (num, den_value)
+      && d > 0
+      && !den.starts_with(['+', '-'])
+    {
       return Ok(Atom::Rational((n * i64::from(polarity), d)));
     }
   }
@@ -1287,6 +1304,7 @@ fn parse_number(lit: &str) -> Result<Atom<'_>, Code> {
   }
   #[cfg(feature = "floats")]
   if radix == 10
+    && number.contains(['.', 'e', 'E'])
     && let Ok(n) = number.parse::<f64>()
   {
     return Ok(Atom::Double((n * f64::from(polarity)).into()));

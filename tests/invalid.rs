@@ -13,9 +13,13 @@ fn invalid_edn() {
   assert!(edn::read_string(r#""foo"#).is_err());
   assert!(edn::read_string("\\cats").is_err());
   assert!(edn::read_string("42/").is_err());
+  assert!(edn::read_string("1/0").is_err());
+  assert!(edn::read_string("1/-2").is_err());
+  assert!(edn::read_string("1/+2").is_err());
   assert!(edn::read_string("#[]").is_err());
   assert!(edn::read_string("# tag nil").is_err());
   assert!(edn::read_string("# :foo{:bar 1}").is_err());
+  assert!(edn::read_string("1İr10").is_err());
 
   let edn = "{
               :cat \"猫\"

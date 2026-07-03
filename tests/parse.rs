@@ -302,18 +302,18 @@ mod test {
       Node::no_discards(NodeKind::Rational((43, 5143)), Span(p!(1), p!(8)))
     );
     assert_eq!(
+      parse::parse(&mut SourceReader::new("-9223372036854775808")).unwrap(),
+      Node::no_discards(NodeKind::Int(i64::MIN), Span(p!(1), p!(21)))
+    );
+    assert_eq!(
       parse::parse(&mut SourceReader::new("-1190128294822145183/3023870813131455535")).unwrap(),
       Node::no_discards(
         NodeKind::Rational((-1190128294822145183, 3023870813131455535)),
         Span(p!(1), p!(41))
       )
     );
-    assert_eq!(
-      parse::parse(&mut SourceReader::new("-2477641376863858799/-8976013293400652448")).unwrap(),
-      Node::no_discards(
-        NodeKind::Rational((-2477641376863858799, -8976013293400652448)),
-        Span(p!(1), p!(42))
-      )
+    assert!(
+      parse::parse(&mut SourceReader::new("-2477641376863858799/-8976013293400652448")).is_err()
     );
   }
 
