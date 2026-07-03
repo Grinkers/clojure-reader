@@ -498,6 +498,11 @@ mod test {
     );
     assert!(parse::parse(&mut reader).is_err());
 
+    assert_eq!(
+      parse::parse(&mut SourceReader::new("\\猫")).unwrap(),
+      Node::no_discards(NodeKind::Char('猫'), Span(p!(1, 1, 0), p!(1, 3, 4)))
+    );
+
     let edn = "[\\space \\@ \\` \\tab \\return \\newline \\# \\% \\' \\g \\( \\* \\j \\+ \\, \\l \\- \\. \\/ \\0 \\2 \\r \\: \\; \\< \\\\ \\] \\} \\~ \\? \\_]";
 
     assert_eq!(

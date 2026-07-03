@@ -14,6 +14,14 @@ fn parse_empty() {
 }
 
 #[test]
+fn read_nil_and_eof() {
+  assert_eq!(edn::read("nil").unwrap(), (Edn::Nil, ""));
+  assert_eq!(edn::read("#_42 nil").unwrap(), (Edn::Nil, ""));
+  assert!(edn::read("").is_err());
+  assert!(edn::read("#_42").is_err());
+}
+
+#[test]
 fn strings() {
   assert_eq!(edn::read_string("\"猫 are 猫\"").unwrap(), Edn::Str("猫 are 猫"));
 
@@ -163,6 +171,7 @@ fn numeric_like_symbols_keywords() {
 #[test]
 fn special_chars() {
   assert_eq!(edn::read_string("\\c[lolthisisvalidedn").unwrap(), Edn::Char('c'),);
+  assert_eq!(edn::read_string("\\猫").unwrap(), Edn::Char('猫'));
 
   let edn = "[\\space \\@ \\` \\tab \\return \\newline \\# \\% \\' \\g \\( \\* \\j \\+ \\, \\l \\- \\. \\/ \\0 \\2 \\r \\: \\; \\< \\\\ \\] \\} \\~ \\? \\_]";
 
@@ -202,6 +211,11 @@ fn special_chars() {
       Edn::Char('_'),
     ])
   );
+}
+
+#[test]
+fn comments_can_end_with_cr() {
+  assert_eq!(edn::read_string(";comment\r42").unwrap(), Edn::Int(42));
 }
 
 #[test]

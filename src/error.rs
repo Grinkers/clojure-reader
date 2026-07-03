@@ -27,6 +27,7 @@ pub enum Code {
   InvalidKeyword,
   InvalidNumber,
   InvalidRadix(Option<u8>),
+  InvalidTag,
   UnexpectedEOF,
   UnmatchedDelimiter(char),
 

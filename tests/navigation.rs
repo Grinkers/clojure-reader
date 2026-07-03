@@ -35,7 +35,6 @@ fn default_map_namespace_syntax() {
     "{:thingy #:foo{:bar \"baz\"} :more \"stuff\"}",
     "{:thingy #:foo {:bar \"baz\"} :more \"stuff\"}",
     "{:more \"stuff\" :thingy #:foo{:bar \"baz\"}}",
-    "{:more \"stuff\" :thingy # :foo{:bar \"baz\"}}",
   ];
   for v in variations {
     let cfg = edn::read_string(&v).unwrap();
@@ -57,7 +56,6 @@ fn default_map_namespace_syntax() {
     "{:thingy #foo{:bar \"baz\"} :more \"stuff\"}",
     "{:thingy #foo {:bar \"baz\"} :more \"stuff\"}",
     "{:more \"stuff\" :thingy #foo{:bar \"baz\"}}",
-    "{:more \"stuff\" :thingy # foo{:bar \"baz\"}}",
   ];
   for v in variations {
     let cfg = edn::read_string(&v).unwrap();

@@ -131,7 +131,13 @@ impl<'e> Node<'e> {
 /// See [`crate::error::Error`].
 #[cfg_attr(not(feature = "unstable"), expect(dead_code))]
 pub fn parse<'r, 'e: 'r>(reader: &'r mut SourceReader<'e>) -> Result<Node<'e>, Error> {
-  parse_with(reader, &NodeBuilder)
+  let start_pos = reader.read_pos;
+  let builder = NodeBuilder;
+  let parsed = {
+    let mut walker = Walker::new(reader);
+    parse_internal(&mut walker, &builder)?
+  };
+  Ok(parsed.unwrap_or_else(|| builder.nil(reader.span_from(start_pos))))
 }
 
 /// Parse the first EDN form from a string and return it with the unread remainder.
@@ -141,7 +147,23 @@ pub fn parse<'r, 'e: 'r>(reader: &'r mut SourceReader<'e>) -> Result<Node<'e>, E
 /// See [`crate::error::Error`].
 pub fn parse_as_edn(edn: &str) -> Result<(Edn<'_>, &str), Error> {
   let mut source_reader = SourceReader::new(edn);
-  let parsed = parse_with(&mut source_reader, &EdnBuilder)?;
+  let start_pos = source_reader.read_pos;
+  let builder = EdnBuilder;
+  let parsed = {
+    let mut walker = Walker::new(&mut source_reader);
+    parse_internal(&mut walker, &builder)?
+  };
+  let parsed = parsed.unwrap_or_else(|| builder.nil(source_reader.span_from(start_pos)));
+  Ok((parsed, source_reader.remaining()))
+}
+
+#[cfg_attr(not(feature = "unstable"), expect(clippy::redundant_pub_crate))]
+pub(crate) fn parse_optional_edn(edn: &str) -> Result<(Option<Edn<'_>>, &str), Error> {
+  let mut source_reader = SourceReader::new(edn);
+  let parsed = {
+    let mut walker = Walker::new(&mut source_reader);
+    parse_internal(&mut walker, &EdnBuilder)?
+  };
   Ok((parsed, source_reader.remaining()))
 }
 
@@ -295,7 +317,6 @@ impl<'e> SourceReader<'e> {
 
   #[inline(always)]
   fn slurp_tag(&mut self) -> Result<&'e str, Error> {
-    self.nibble_whitespace();
     let starting_ptr = self.read_pos.ptr;
 
     loop {
@@ -313,9 +334,12 @@ impl<'e> SourceReader<'e> {
   // Nibbles away until the next new line
   #[inline(always)]
   fn nibble_newline(&mut self) {
-    let len =
-      self.slice[self.read_pos.ptr..].split('\n').next().expect("Expected at least an empty slice");
-    self.read_pos.ptr += len.len();
+    while let Some(c) = self.peek_next() {
+      if matches!(c, '\n' | '\r') {
+        break;
+      }
+      let _ = self.nibble_next();
+    }
     self.nibble_whitespace();
   }
 
@@ -907,18 +931,6 @@ impl<'e> InternalParser<'e> for NodeBuilder {
   }
 }
 
-fn parse_with<'r, 'e: 'r, B: InternalParser<'e>>(
-  reader: &'r mut SourceReader<'e>,
-  builder: &B,
-) -> Result<B::Item, Error> {
-  let start_pos = reader.read_pos;
-  let mut walker = Walker::new(reader);
-  Ok(
-    parse_internal(&mut walker, builder)?
-      .unwrap_or_else(|| builder.nil(walker.reader.span_from(start_pos))),
-  )
-}
-
 #[expect(clippy::mem_replace_with_default)]
 const fn take_discards<D>(discards: &mut Vec<D>) -> Vec<D> {
   replace(discards, Vec::new())
@@ -991,15 +1003,20 @@ fn handle_open_delimiter<'e, B: InternalParser<'e>>(
           let _ = walker.reader.nibble_next();
           walker.push_context(ParseContext::no_discards(ContextKind::Discard(pos_start)));
         }
-        _ => {
+        Some(c) if !c.is_whitespace() && !DELIMITERS.contains(&c) => {
           let tag_pos_start = walker.pos();
           let tag = walker.reader.slurp_tag()?;
           let tag_span = walker.span_from(tag_pos_start);
+          if tag.is_empty() {
+            return Err(walker.make_error(Code::InvalidTag));
+          }
 
           walker.reader.nibble_whitespace();
           walker
             .push_context(ParseContext::no_discards(ContextKind::Tag(tag, tag_span, pos_start)));
         }
+        Some(_) => return Err(walker.make_error(Code::InvalidTag)),
+        None => return Err(walker.make_error(Code::UnexpectedEOF)),
       }
     }
   }
@@ -1199,7 +1216,7 @@ fn parse_char(lit: &str) -> Result<char, Code> {
     "return" => Ok('\r'),
     "tab" => Ok('\t'),
     "space" => Ok(' '),
-    c if c.len() == 1 => Ok(c.chars().next().expect("c must be len of 1")),
+    c if c.chars().count() == 1 => Ok(c.chars().next().expect("c must be one character")),
     _ => Err(Code::InvalidChar),
   }
 }

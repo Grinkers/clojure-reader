@@ -145,16 +145,16 @@ pub fn read_string(edn: &str) -> Result<Edn<'_>, error::Error> {
 ///
 /// See [`crate::error::Error`].
 pub fn read(edn: &str) -> Result<(Edn<'_>, &str), error::Error> {
-  let r = parse::parse_as_edn(edn)?;
-  if r.0 == Edn::Nil && r.1.is_empty() {
+  let (edn, remaining) = parse::parse_optional_edn(edn)?;
+  let Some(edn) = edn else {
     return Err(error::Error {
       code: error::Code::UnexpectedEOF,
       line: None,
       column: None,
       ptr: None,
     });
-  }
-  Ok((r.0, r.1))
+  };
+  Ok((edn, remaining))
 }
 
 fn get_tag<'a>(tag: &'a str, key: &'a str) -> Option<&'a str> {

@@ -107,7 +107,7 @@ fn parse_tag_no_end() {
   );
   assert_eq!(
     err_as_string(r"#Unit ;"),
-    "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(7), ptr: Some(7) }"
+    "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(8), ptr: Some(7) }"
   );
 }
 
