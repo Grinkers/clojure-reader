@@ -8,7 +8,7 @@ mod test {
 
   #[test]
   fn node_try_into_edn_matches_read_string() {
-    let input = r#"#_ :ignored {:foo [1 #_2 {:bar nil}] :baz #{true #_false :qux} :tagged #inst "1985-04-12T23:20:50.52Z"} trailing"#;
+    let input = r#"#_ :ignored {:foo [1 #_2 {:bar nil}] :baz #{true #_false :qux} :tagged #inst "1985-04-12T23:20:50.52Z" :escaped "a\nb"} trailing"#;
 
     let mut reader = SourceReader::new(input);
     let node = parse::parse(&mut reader).unwrap();

@@ -25,14 +25,14 @@ fn namespace_get_contains() {
   // (get edn-data :foo)        -> nil
   assert_eq!(edn_data.get(&Edn::Key("foo")), None);
   // (get edn-data :thingy/foo) -> "bar"
-  assert_eq!(edn_data.get(&Edn::Key("thingy/foo")), Some(&Edn::Str("bar")));
+  assert_eq!(edn_data.get(&Edn::Key("thingy/foo")), Some(&Edn::Str("bar".into())));
   // (get edn-data :baz/bar)    -> "qux"
-  assert_eq!(edn_data.get(&Edn::Key("baz/bar")), Some(&Edn::Str("qux")));
+  assert_eq!(edn_data.get(&Edn::Key("baz/bar")), Some(&Edn::Str("qux".into())));
 
   // (contains? edn-data 42) -> true
   assert!(edn_data.contains(&Edn::Int(42)));
   // (contains? edn-data "42") -> false
-  assert!(!edn_data.contains(&Edn::Str("42")));
+  assert!(!edn_data.contains(&Edn::Str("42".into())));
   // (contains? edn-data :foo) -> false
   assert!(!edn_data.contains(&Edn::Key("foo")));
   // (contains? edn-data :thingy/foo) -> true

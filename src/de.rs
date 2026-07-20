@@ -1,3 +1,4 @@
+use alloc::borrow::Cow;
 use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::ToString;
@@ -81,8 +82,9 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
     V: Visitor<'de>,
   {
     match self {
-      Edn::Key(k) => visitor.visit_borrowed_str(k),
-      Edn::Str(s) | Edn::Symbol(s) => visitor.visit_borrowed_str(s),
+      Edn::Key(k) | Edn::Symbol(k) => visitor.visit_borrowed_str(k),
+      Edn::Str(Cow::Borrowed(s)) => visitor.visit_borrowed_str(s),
+      Edn::Str(Cow::Owned(s)) => visitor.visit_string(s),
       Edn::Int(i) => visitor.visit_i64(i),
       #[cfg(feature = "floats")]
       Edn::Double(d) => visitor.visit_f64(*d),
@@ -120,66 +122,60 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
   where
     V: Visitor<'de>,
   {
-    let int = i8::try_from(get_int_from_edn(&self)?);
-    int.map_or_else(
-      |_| Err(de::Error::custom(format!("can't convert {int:?} into i8"))),
-      |i| visitor.visit_i8(i),
-    )
+    let source = get_int_from_edn(&self)?;
+    i8::try_from(source)
+      .map_err(|_| de::Error::custom(format!("can't convert {source} into i8")))
+      .and_then(|int| visitor.visit_i8(int))
   }
 
   fn deserialize_i16<V>(self, visitor: V) -> Result<V::Value>
   where
     V: Visitor<'de>,
   {
-    let int = i16::try_from(get_int_from_edn(&self)?);
-    int.map_or_else(
-      |_| Err(de::Error::custom(format!("can't convert {int:?} into i16"))),
-      |i| visitor.visit_i16(i),
-    )
+    let source = get_int_from_edn(&self)?;
+    i16::try_from(source)
+      .map_err(|_| de::Error::custom(format!("can't convert {source} into i16")))
+      .and_then(|int| visitor.visit_i16(int))
   }
 
   fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value>
   where
     V: Visitor<'de>,
   {
-    let int = i32::try_from(get_int_from_edn(&self)?);
-    int.map_or_else(
-      |_| Err(de::Error::custom(format!("can't convert {int:?} into i32"))),
-      |i| visitor.visit_i32(i),
-    )
+    let source = get_int_from_edn(&self)?;
+    i32::try_from(source)
+      .map_err(|_| de::Error::custom(format!("can't convert {source} into i32")))
+      .and_then(|int| visitor.visit_i32(int))
   }
 
   fn deserialize_u8<V>(self, visitor: V) -> Result<V::Value>
   where
     V: Visitor<'de>,
   {
-    let int = u8::try_from(get_int_from_edn(&self)?);
-    int.map_or_else(
-      |_| Err(de::Error::custom(format!("can't convert {int:?} into u8"))),
-      |i| visitor.visit_u8(i),
-    )
+    let source = get_int_from_edn(&self)?;
+    u8::try_from(source)
+      .map_err(|_| de::Error::custom(format!("can't convert {source} into u8")))
+      .and_then(|int| visitor.visit_u8(int))
   }
 
   fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value>
   where
     V: Visitor<'de>,
   {
-    let int = u16::try_from(get_int_from_edn(&self)?);
-    int.map_or_else(
-      |_| Err(de::Error::custom(format!("can't convert {int:?} into u16"))),
-      |i| visitor.visit_u16(i),
-    )
+    let source = get_int_from_edn(&self)?;
+    u16::try_from(source)
+      .map_err(|_| de::Error::custom(format!("can't convert {source} into u16")))
+      .and_then(|int| visitor.visit_u16(int))
   }
 
   fn deserialize_u32<V>(self, visitor: V) -> Result<V::Value>
   where
     V: Visitor<'de>,
   {
-    let int = u32::try_from(get_int_from_edn(&self)?);
-    int.map_or_else(
-      |_| Err(de::Error::custom(format!("can't convert {int:?} into u32"))),
-      |i| visitor.visit_u32(i),
-    )
+    let source = get_int_from_edn(&self)?;
+    u32::try_from(source)
+      .map_err(|_| de::Error::custom(format!("can't convert {source} into u32")))
+      .and_then(|int| visitor.visit_u32(int))
   }
 
   fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value>
@@ -188,17 +184,15 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
   {
     #[cfg(feature = "arbitrary-nums")]
     if let Edn::BigInt(i) = &self {
-      return match u64::try_from(i.clone()) {
-        Ok(i) => visitor.visit_u64(i),
-        Err(err) => Err(de::Error::custom(format!("can't convert {err:?} into u64"))),
-      };
+      return u64::try_from(i)
+        .map_err(|_| de::Error::custom(format!("can't convert {i} into u64")))
+        .and_then(|int| visitor.visit_u64(int));
     }
 
-    let int = u64::try_from(get_int_from_edn(&self)?);
-    int.map_or_else(
-      |_| Err(de::Error::custom(format!("can't convert {int:?} into u64"))),
-      |i| visitor.visit_u64(i),
-    )
+    let source = get_int_from_edn(&self)?;
+    u64::try_from(source)
+      .map_err(|_| de::Error::custom(format!("can't convert {source} into u64")))
+      .and_then(|int| visitor.visit_u64(int))
   }
 
   fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value>
@@ -327,7 +321,8 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
     V: Visitor<'de>,
   {
     match self {
-      Edn::Key(k) | Edn::Str(k) | Edn::Symbol(k) => visitor.visit_borrowed_str(k),
+      Edn::Key(k) | Edn::Symbol(k) | Edn::Str(Cow::Borrowed(k)) => visitor.visit_borrowed_str(k),
+      Edn::Str(Cow::Owned(k)) => visitor.visit_string(k),
       other => visitor.visit_string(other.to_string()),
     }
   }

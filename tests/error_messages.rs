@@ -179,3 +179,37 @@ fn test_unexpected_eof_in_discard() {
     "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(3), ptr: Some(2) }"
   );
 }
+
+#[test]
+fn invalid_string_escape_positions() {
+  // The error points at the offending escaped character.
+  assert_eq!(
+    err_as_string(r#""\x""#),
+    "EdnError { code: InvalidEscape, line: Some(1), column: Some(4), ptr: Some(3) }"
+  );
+  assert_eq!(
+    err_as_string(r#""a\xb""#),
+    "EdnError { code: InvalidEscape, line: Some(1), column: Some(5), ptr: Some(4) }"
+  );
+
+  // Position tracking is correct across a real newline within the string.
+  assert_eq!(
+    err_as_string("\"a\n\\x\""),
+    "EdnError { code: InvalidEscape, line: Some(2), column: Some(3), ptr: Some(5) }"
+  );
+}
+
+#[test]
+fn unterminated_string_eof() {
+  // Trailing lone backslash consumes the closing quote as an escape, hitting EOF.
+  assert_eq!(
+    err_as_string("\"abc\\"),
+    "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(6), ptr: Some(5) }"
+  );
+
+  // A string with no closing quote at all.
+  assert_eq!(
+    err_as_string(r#""abc"#),
+    "EdnError { code: UnexpectedEOF, line: Some(1), column: Some(5), ptr: Some(4) }"
+  );
+}

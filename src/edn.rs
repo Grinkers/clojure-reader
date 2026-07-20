@@ -6,10 +6,12 @@
 //!    will convert the Node into an Edn
 //!
 //! ## Differences from Clojure
-//! -  Escape characters are not escaped.
+//! -  String escape support is limited to `\\t`, `\\r`, `\\n`, `\\\\`, and `\\"`.
 
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 
@@ -31,7 +33,8 @@ pub enum Edn<'e> {
   List(Vec<Self>),
   Key(&'e str),
   Symbol(&'e str),
-  Str(&'e str),
+  /// A decoded string. Strings without escapes borrow from the input; escaped strings are owned.
+  Str(Cow<'e, str>),
   Int(i64),
   Tagged(&'e str, Box<Self>),
   #[cfg(feature = "floats")]
@@ -103,7 +106,7 @@ impl<'e> TryFrom<parse::Node<'e>> for Edn<'e> {
   /// [HMDK]: error::Code::HashMapDuplicateKey
   /// [SDK]: error::Code::SetDuplicateKey
   /// [IT]: error::Code::InvalidTag
-  fn try_from(parse::Node { kind: value, .. }: parse::Node<'e>) -> error::Result<Self> {
+  fn try_from(parse::Node { kind: value, span, .. }: parse::Node<'e>) -> error::Result<Self> {
     use error::{Code, Error, Result};
     use parse::NodeKind;
 
@@ -136,7 +139,9 @@ impl<'e> TryFrom<parse::Node<'e>> for Edn<'e> {
       }
       NodeKind::Key(key) => Edn::Key(key),
       NodeKind::Symbol(symbol) => Edn::Symbol(symbol),
-      NodeKind::Str(str) => Edn::Str(str),
+      NodeKind::Str(raw) => {
+        Edn::Str(decode_string(raw).map_err(|code| Error::from_position(code, span.0))?)
+      }
       NodeKind::Int(int) => Edn::Int(int),
       NodeKind::Tagged(tag, tag_span, node) => {
         validate_tag(tag, tag_span)?;
@@ -275,6 +280,61 @@ pub(crate) const fn char_to_edn(c: char) -> Option<&'static str> {
   }
 }
 
+/// Decodes the character following a `\` in a string escape sequence.
+///
+/// Returns `None` for unsupported escapes. This is the single source of truth for
+/// which escape sequences are valid; it is shared by the parser's escape validation
+/// and by `decode_string`, and is mirrored by `write_string`.
+pub(crate) const fn unescape_char(c: char) -> Option<char> {
+  match c {
+    't' => Some('\t'),
+    'r' => Some('\r'),
+    'n' => Some('\n'),
+    '\\' => Some('\\'),
+    '"' => Some('"'),
+    _ => None,
+  }
+}
+
+pub(crate) fn decode_string(raw: &str) -> Result<Cow<'_, str>, error::Code> {
+  let Some(first_escape) = raw.find('\\') else {
+    return Ok(Cow::Borrowed(raw));
+  };
+
+  let mut decoded = String::with_capacity(raw.len());
+  decoded.push_str(&raw[..first_escape]);
+  let mut chars = raw[first_escape..].chars();
+  while let Some(c) = chars.next() {
+    if c != '\\' {
+      decoded.push(c);
+      continue;
+    }
+
+    // `chars.next()` yields the escaped char; a trailing lone `\` (None) or an
+    // unsupported escape both map to `None` here and are rejected.
+    let Some(unescaped) = chars.next().and_then(unescape_char) else {
+      return Err(error::Code::InvalidEscape);
+    };
+    decoded.push(unescaped);
+  }
+  Ok(Cow::Owned(decoded))
+}
+
+pub(crate) fn write_string<W: fmt::Write>(writer: &mut W, value: &str) -> fmt::Result {
+  writer.write_char('"')?;
+  for c in value.chars() {
+    match c {
+      '\t' => writer.write_str("\\t")?,
+      '\r' => writer.write_str("\\r")?,
+      '\n' => writer.write_str("\\n")?,
+      '\\' => writer.write_str("\\\\")?,
+      '"' => writer.write_str("\\\"")?,
+      _ => writer.write_char(c)?,
+    }
+  }
+  writer.write_char('"')
+}
+
 impl fmt::Display for Edn<'_> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
@@ -329,7 +389,7 @@ impl fmt::Display for Edn<'_> {
       Self::Symbol(sy) => write!(f, "{sy}"),
       Self::Tagged(t, s) => write!(f, "#{t} {s}"),
       Self::Key(k) => write!(f, ":{k}"),
-      Self::Str(s) => write!(f, "\"{s}\""),
+      Self::Str(s) => write_string(f, s),
       Self::Int(i) => write!(f, "{i}"),
       #[cfg(feature = "floats")]
       Self::Double(d) => write!(f, "{d}"),

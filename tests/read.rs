@@ -23,9 +23,80 @@ fn read_nil_and_eof() {
 
 #[test]
 fn strings() {
-  assert_eq!(edn::read_string("\"猫 are 猫\"").unwrap(), Edn::Str("猫 are 猫"));
+  use alloc::borrow::Cow;
 
-  assert_eq!(edn::read_string(r#""foo\rbar""#).unwrap(), Edn::Str("foo\\rbar"));
+  let plain = edn::read_string("\"猫 are 猫\"").unwrap();
+  assert_eq!(plain, Edn::Str("猫 are 猫".into()));
+  assert!(matches!(plain, Edn::Str(Cow::Borrowed(_))));
+
+  let escaped = edn::read_string(r#""foo\rbar\n\t\\\"""#).unwrap();
+  assert_eq!(escaped, Edn::Str("foo\rbar\n\t\\\"".into()));
+  assert!(matches!(escaped, Edn::Str(Cow::Owned(_))));
+}
+
+#[test]
+fn strings_without_escapes_borrow() {
+  use alloc::borrow::Cow;
+
+  // The empty string, plain ASCII, and multi-byte UTF-8 all borrow from the input.
+  for input in ["\"\"", "\"abc\"", "\"猫\""] {
+    let edn = edn::read_string(input).unwrap();
+    assert!(matches!(edn, Edn::Str(Cow::Borrowed(_))), "{input} should borrow");
+  }
+
+  // A literal (non-escaped) newline inside the string is not an escape sequence,
+  // so the value is still borrowed verbatim.
+  let multiline = edn::read_string("\"a\nb\"").unwrap();
+  assert_eq!(multiline, Edn::Str("a\nb".into()));
+  assert!(matches!(multiline, Edn::Str(Cow::Borrowed(_))));
+}
+
+#[test]
+fn strings_each_escape_decodes() {
+  use alloc::borrow::Cow;
+
+  // Every supported escape decodes to its control character and forces an owned Cow.
+  let cases =
+    [(r#""\t""#, "\t"), (r#""\r""#, "\r"), (r#""\n""#, "\n"), (r#""\\""#, "\\"), (r#""\"""#, "\"")];
+  for (input, expected) in cases {
+    let edn = edn::read_string(input).unwrap();
+    assert_eq!(edn, Edn::Str(expected.into()), "decoding {input}");
+    assert!(matches!(edn, Edn::Str(Cow::Owned(_))), "{input} should own");
+  }
+
+  // Escapes at the start, middle, and end of a string, plus consecutive escapes.
+  assert_eq!(edn::read_string(r#""\nabc""#).unwrap(), Edn::Str("\nabc".into()));
+  assert_eq!(edn::read_string(r#""a\nb""#).unwrap(), Edn::Str("a\nb".into()));
+  assert_eq!(edn::read_string(r#""abc\n""#).unwrap(), Edn::Str("abc\n".into()));
+  assert_eq!(edn::read_string(r#""\\\\""#).unwrap(), Edn::Str("\\\\".into()));
+  assert_eq!(edn::read_string(r#""a\"b""#).unwrap(), Edn::Str("a\"b".into()));
+}
+
+#[test]
+fn strings_owned_and_borrowed_compare_equal() {
+  // A decoded (owned) string must be equal to and hash/order the same as an
+  // identical borrowed string. This matters because `Edn` is used as a map/set key.
+  let owned = edn::read_string(r#""a\nb""#).unwrap();
+  let borrowed = edn::read_string("\"a\nb\"").unwrap();
+  assert_eq!(owned, borrowed);
+
+  let map = edn::read_string(r#"{"a\nb" 1}"#).unwrap();
+  assert_eq!(map.get(&Edn::Str("a\nb".into())), Some(&Edn::Int(1)));
+}
+
+#[test]
+fn strings_invalid_escapes_are_rejected() {
+  use clojure_reader::error::Code;
+
+  // Unsupported escape sequences (including \b and \f which Clojure allows but this
+  // crate does not, and \uNNNN unicode escapes) must error rather than silently pass.
+  for input in [r#""\x""#, r#""\f""#, r#""\b""#, r#""\0""#, r#""\u0041""#, "\"\\猫\""] {
+    let err = edn::read_string(input).unwrap_err();
+    assert_eq!(err.code, Code::InvalidEscape, "{input} should be InvalidEscape");
+  }
+
+  // A trailing lone backslash (escape with nothing after it) hits EOF.
+  assert_eq!(edn::read_string("\"abc\\").unwrap_err().code, Code::UnexpectedEOF);
 }
 
 #[test]
@@ -42,9 +113,12 @@ fn maps() {
   assert_eq!(
     edn::read_string(e).unwrap(),
     Edn::Map(BTreeMap::from([
-      (Edn::Key("cat"), Edn::Str("猫")),
+      (Edn::Key("cat"), Edn::Str("猫".into())),
       (Edn::Key("num"), Edn::Int(-36930)),
-      (Edn::Map(BTreeMap::from([(Edn::Key("foo"), Edn::Str("bar"))])), Edn::Str("foobar")),
+      (
+        Edn::Map(BTreeMap::from([(Edn::Key("foo"), Edn::Str("bar".into()))])),
+        Edn::Str("foobar".into())
+      ),
       (Edn::Key("r"), Edn::Rational((42, 4242))),
       (Edn::Key("lisp"), Edn::List(vec![Edn::List(vec![])])),
     ]))
@@ -252,7 +326,7 @@ fn read_forms() {
 fn tagged() {
   assert_eq!(
     edn::read_string("#inst \"1985-04-12T23:20:50.52Z\"").unwrap(),
-    Edn::Tagged("inst", Box::new(Edn::Str("1985-04-12T23:20:50.52Z")))
+    Edn::Tagged("inst", Box::new(Edn::Str("1985-04-12T23:20:50.52Z".into())))
   );
   assert_eq!(edn::read_string(r"#Unit nil").unwrap(), Edn::Tagged("Unit", Box::new(Edn::Nil)));
   assert_eq!(edn::read_string("#foo/bar nil").unwrap(), Edn::Tagged("foo/bar", Box::new(Edn::Nil)));
@@ -269,7 +343,7 @@ fn tagged() {
   );
   assert_eq!(
     edn::read_string("#foo\"bar\"").unwrap(),
-    Edn::Tagged("foo", Box::new(Edn::Str("bar")))
+    Edn::Tagged("foo", Box::new(Edn::Str("bar".into())))
   );
 
   assert_eq!(
@@ -287,7 +361,7 @@ fn tagged() {
           "ニャンキャット",
           Box::new(Edn::Map(BTreeMap::from([(
             Edn::Key("baz"),
-            Edn::Tagged("tag42", Box::new(Edn::Str("wut")))
+            Edn::Tagged("tag42", Box::new(Edn::Str("wut".into())))
           )])))
         ))
       ))

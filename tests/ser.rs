@@ -40,9 +40,26 @@ mod test {
   }
 
   #[test]
-  fn strings_are_not_escaped() {
+  fn strings_are_escaped() {
     let value = "a\"b\\c\n\r\t\u{0001}";
-    assert_eq!(to_string(&value).unwrap(), alloc::format!("\"{value}\""));
+    assert_eq!(to_string(&value).unwrap(), "\"a\\\"b\\\\c\\n\\r\\t\u{0001}\"");
+  }
+
+  #[test]
+  fn empty_string_serializes() {
+    assert_eq!(to_string(&"").unwrap(), "\"\"");
+  }
+
+  #[test]
+  fn each_escape_serializes() {
+    // Each character that needs escaping is emitted with its backslash sequence.
+    assert_eq!(to_string(&"\t").unwrap(), r#""\t""#);
+    assert_eq!(to_string(&"\r").unwrap(), r#""\r""#);
+    assert_eq!(to_string(&"\n").unwrap(), r#""\n""#);
+    assert_eq!(to_string(&"\\").unwrap(), r#""\\""#);
+    assert_eq!(to_string(&"\"").unwrap(), r#""\"""#);
+    // Ordinary and multi-byte characters pass through untouched.
+    assert_eq!(to_string(&"猫").unwrap(), "\"猫\"");
   }
 
   #[test]

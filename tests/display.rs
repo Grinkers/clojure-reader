@@ -32,9 +32,35 @@ fn chars() {
 }
 
 #[test]
-fn strings_are_not_escaped() {
+fn strings_are_escaped() {
   let value = "a\"b\\c\n\r\t\u{0001}";
-  assert_eq!(format!("{}", Edn::Str(value)), format!("\"{value}\""));
+  assert_eq!(format!("{}", Edn::Str(value.into())), "\"a\\\"b\\\\c\\n\\r\\t\u{0001}\"");
+}
+
+#[test]
+fn empty_string_display() {
+  display!("\"\"");
+  assert_eq!(format!("{}", Edn::Str("".into())), "\"\"");
+}
+
+#[test]
+fn strings_round_trip_through_display() {
+  // Parsing then displaying then re-parsing must yield the original value for
+  // strings containing every supported escape sequence.
+  let source = r#""a\nb\tc\r\\\"""#;
+  let original = edn::read_string(source).unwrap();
+  let displayed = format!("{original}");
+  assert_eq!(displayed, source);
+  assert_eq!(edn::read_string(&displayed).unwrap(), original);
+}
+
+#[test]
+fn raw_control_char_round_trips() {
+  // A raw control character is emitted verbatim (not \u-escaped) and parses back.
+  let value = Edn::Str("\u{1}".into());
+  let displayed = format!("{value}");
+  assert_eq!(displayed, "\"\u{1}\"");
+  assert_eq!(edn::read_string(&displayed).unwrap(), value);
 }
 
 #[test]

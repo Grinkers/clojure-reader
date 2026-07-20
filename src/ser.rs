@@ -163,10 +163,8 @@ impl ser::Serializer for &mut Serializer {
   }
 
   fn serialize_str(self, v: &str) -> Result<()> {
-    self.output += "\"";
-    self.output += v;
-    self.output += "\"";
-    Ok(())
+    crate::edn::write_string(&mut self.output, v)
+      .map_err(|e| ser::Error::custom(format!("failed to serialize string: {e}")))
   }
 
   // as of 2024-11, this is not called by serde

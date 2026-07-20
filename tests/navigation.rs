@@ -9,7 +9,7 @@ fn get() {
   let e = edn::read_string("{:foo 4 :bar 2}").unwrap();
 
   assert_eq!(e.get(&Edn::Key("foo")), Some(&Edn::Int(4)));
-  assert_eq!(e.get(&Edn::Str("foo")), None);
+  assert_eq!(e.get(&Edn::Str("foo".into())), None);
   assert_eq!(e.get(&Edn::Symbol(":foo")), None);
   assert_eq!(e.nth(0), None);
 }
@@ -20,7 +20,7 @@ fn nth() {
 
   assert_eq!(e.nth(3), Some(&Edn::Int(42)));
   assert_eq!(e.nth(42), None);
-  assert_eq!(e.get(&Edn::Str(":foo")), None);
+  assert_eq!(e.get(&Edn::Str(":foo".into())), None);
 
   let e = edn::read_string("(1 2 3 42 3 2 1)").unwrap();
 
@@ -44,10 +44,10 @@ fn default_map_namespace_syntax() {
       cfg.get(&Edn::Key("thingy")),
       Some(&Edn::Tagged(
         ":foo",
-        Box::new(Edn::Map(BTreeMap::from([(Edn::Key("bar"), Edn::Str("baz"))])))
+        Box::new(Edn::Map(BTreeMap::from([(Edn::Key("bar"), Edn::Str("baz".into()))])))
       ))
     );
-    assert_eq!(cfg.get(&Edn::Key("more")), Some(&Edn::Str("stuff")));
+    assert_eq!(cfg.get(&Edn::Key("more")), Some(&Edn::Str("stuff".into())));
   }
 
   // without keyword `:` symbol.
@@ -65,10 +65,10 @@ fn default_map_namespace_syntax() {
       cfg.get(&Edn::Key("thingy")),
       Some(&Edn::Tagged(
         "foo",
-        Box::new(Edn::Map(BTreeMap::from([(Edn::Key("bar"), Edn::Str("baz"))])))
+        Box::new(Edn::Map(BTreeMap::from([(Edn::Key("bar"), Edn::Str("baz".into()))])))
       ))
     );
-    assert_eq!(cfg.get(&Edn::Key("more")), Some(&Edn::Str("stuff")));
+    assert_eq!(cfg.get(&Edn::Key("more")), Some(&Edn::Str("stuff".into())));
   }
 }
 
@@ -76,8 +76,8 @@ fn default_map_namespace_syntax() {
 fn namespace_syntax_edge_cases() {
   let edn_data = edn::read_string(r#"#:thingy {:f#猫o "bar" :baz/bar "qux" 42 24}"#).unwrap();
 
-  assert_eq!(edn_data.get(&Edn::Key("thingy/f#猫o")), Some(&Edn::Str("bar")));
-  assert_eq!(edn_data.get(&Edn::Key("baz/bar")), Some(&Edn::Str("qux")));
+  assert_eq!(edn_data.get(&Edn::Key("thingy/f#猫o")), Some(&Edn::Str("bar".into())));
+  assert_eq!(edn_data.get(&Edn::Key("baz/bar")), Some(&Edn::Str("qux".into())));
   assert_eq!(edn_data.get(&Edn::Key("foo")), None);
   assert_eq!(edn_data.get(&Edn::Key("baz")), None);
   assert_eq!(edn_data.get(&Edn::Key(":baz/bar")), None);
@@ -97,7 +97,7 @@ fn namespace_syntax_edge_cases() {
 #[test]
 fn get_contains() {
   let edn_data = edn::read_string(r#"{:f#猫o "bar" :baz/bar "qux" 42 24}"#).unwrap();
-  assert_eq!(edn_data.get(&Edn::Key("f#猫o")), Some(&Edn::Str("bar")));
+  assert_eq!(edn_data.get(&Edn::Key("f#猫o")), Some(&Edn::Str("bar".into())));
   assert_eq!(edn_data.contains(&Edn::Key("f#猫o")), true);
   assert_eq!(edn_data.get(&Edn::Key("foo")), None);
   assert_eq!(edn_data.contains(&Edn::Key("foo")), false);
