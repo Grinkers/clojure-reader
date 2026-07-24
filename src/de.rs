@@ -120,9 +120,9 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
   where
     V: Visitor<'de>,
   {
-    let int = i8::try_from(get_int_from_edn(&self)?);
-    int.map_or_else(
-      |_| Err(de::Error::custom(format!("can't convert {int:?} into i8"))),
+    let int = get_int_from_edn(&self)?;
+    i8::try_from(int).map_or_else(
+      |_| Err(de::Error::custom(format!("can't convert {int} into i8"))),
       |i| visitor.visit_i8(i),
     )
   }
@@ -131,9 +131,9 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
   where
     V: Visitor<'de>,
   {
-    let int = i16::try_from(get_int_from_edn(&self)?);
-    int.map_or_else(
-      |_| Err(de::Error::custom(format!("can't convert {int:?} into i16"))),
+    let int = get_int_from_edn(&self)?;
+    i16::try_from(int).map_or_else(
+      |_| Err(de::Error::custom(format!("can't convert {int} into i16"))),
       |i| visitor.visit_i16(i),
     )
   }
@@ -142,9 +142,9 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
   where
     V: Visitor<'de>,
   {
-    let int = i32::try_from(get_int_from_edn(&self)?);
-    int.map_or_else(
-      |_| Err(de::Error::custom(format!("can't convert {int:?} into i32"))),
+    let int = get_int_from_edn(&self)?;
+    i32::try_from(int).map_or_else(
+      |_| Err(de::Error::custom(format!("can't convert {int} into i32"))),
       |i| visitor.visit_i32(i),
     )
   }
@@ -153,9 +153,9 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
   where
     V: Visitor<'de>,
   {
-    let int = u8::try_from(get_int_from_edn(&self)?);
-    int.map_or_else(
-      |_| Err(de::Error::custom(format!("can't convert {int:?} into u8"))),
+    let int = get_int_from_edn(&self)?;
+    u8::try_from(int).map_or_else(
+      |_| Err(de::Error::custom(format!("can't convert {int} into u8"))),
       |i| visitor.visit_u8(i),
     )
   }
@@ -164,9 +164,9 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
   where
     V: Visitor<'de>,
   {
-    let int = u16::try_from(get_int_from_edn(&self)?);
-    int.map_or_else(
-      |_| Err(de::Error::custom(format!("can't convert {int:?} into u16"))),
+    let int = get_int_from_edn(&self)?;
+    u16::try_from(int).map_or_else(
+      |_| Err(de::Error::custom(format!("can't convert {int} into u16"))),
       |i| visitor.visit_u16(i),
     )
   }
@@ -175,9 +175,9 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
   where
     V: Visitor<'de>,
   {
-    let int = u32::try_from(get_int_from_edn(&self)?);
-    int.map_or_else(
-      |_| Err(de::Error::custom(format!("can't convert {int:?} into u32"))),
+    let int = get_int_from_edn(&self)?;
+    u32::try_from(int).map_or_else(
+      |_| Err(de::Error::custom(format!("can't convert {int} into u32"))),
       |i| visitor.visit_u32(i),
     )
   }
@@ -188,15 +188,15 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
   {
     #[cfg(feature = "arbitrary-nums")]
     if let Edn::BigInt(i) = &self {
-      return match u64::try_from(i.clone()) {
-        Ok(i) => visitor.visit_u64(i),
-        Err(err) => Err(de::Error::custom(format!("can't convert {err:?} into u64"))),
-      };
+      return u64::try_from(i).map_or_else(
+        |_| Err(de::Error::custom(format!("can't convert {i} into u64"))),
+        |i| visitor.visit_u64(i),
+      );
     }
 
-    let int = u64::try_from(get_int_from_edn(&self)?);
-    int.map_or_else(
-      |_| Err(de::Error::custom(format!("can't convert {int:?} into u64"))),
+    let int = get_int_from_edn(&self)?;
+    u64::try_from(int).map_or_else(
+      |_| Err(de::Error::custom(format!("can't convert {int} into u64"))),
       |i| visitor.visit_u64(i),
     )
   }

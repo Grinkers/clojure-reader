@@ -20,7 +20,7 @@ mod test {
 
     let res = from_str::<u8>("424242");
     let Err(res) = res else { panic!() };
-    let expected = "EdnError { code: Serde(\"can't convert Err(TryFromIntError(())) into u8\"), line: None, column: None, ptr: None }";
+    let expected = "EdnError { code: Serde(\"can't convert 424242 into u8\"), line: None, column: None, ptr: None }";
     assert_eq!(format!("{res}"), expected);
 
     assert_eq!("lol cats", from_str::<String>(r#""lol cats""#).unwrap());
@@ -73,7 +73,13 @@ mod test {
   #[test]
   fn large_unsigned_values() {
     #[cfg(feature = "arbitrary-nums")]
-    assert_eq!(from_str::<u64>("18446744073709551615N").unwrap(), u64::MAX);
+    {
+      assert_eq!(from_str::<u64>("18446744073709551615N").unwrap(), u64::MAX);
+      assert_eq!(
+        format!("{:?}", from_str::<u64>("18446744073709551616N")),
+        "Err(EdnError { code: Serde(\"can't convert 18446744073709551616 into u64\"), line: None, column: None, ptr: None })"
+      );
+    }
 
     #[cfg(not(feature = "arbitrary-nums"))]
     assert!(from_str::<u64>("18446744073709551615").is_err());
@@ -95,27 +101,27 @@ mod test {
   fn integer_overflow_errors() {
     assert_eq!(
       format!("{:?}", from_str::<i8>("128")),
-      "Err(EdnError { code: Serde(\"can't convert Err(TryFromIntError(())) into i8\"), line: None, column: None, ptr: None })"
+      "Err(EdnError { code: Serde(\"can't convert 128 into i8\"), line: None, column: None, ptr: None })"
     );
     assert_eq!(
       format!("{:?}", from_str::<i16>("32768")),
-      "Err(EdnError { code: Serde(\"can't convert Err(TryFromIntError(())) into i16\"), line: None, column: None, ptr: None })"
+      "Err(EdnError { code: Serde(\"can't convert 32768 into i16\"), line: None, column: None, ptr: None })"
     );
     assert_eq!(
       format!("{:?}", from_str::<i32>("2147483648")),
-      "Err(EdnError { code: Serde(\"can't convert Err(TryFromIntError(())) into i32\"), line: None, column: None, ptr: None })"
+      "Err(EdnError { code: Serde(\"can't convert 2147483648 into i32\"), line: None, column: None, ptr: None })"
     );
     assert_eq!(
       format!("{:?}", from_str::<u16>("65536")),
-      "Err(EdnError { code: Serde(\"can't convert Err(TryFromIntError(())) into u16\"), line: None, column: None, ptr: None })"
+      "Err(EdnError { code: Serde(\"can't convert 65536 into u16\"), line: None, column: None, ptr: None })"
     );
     assert_eq!(
       format!("{:?}", from_str::<u32>("4294967296")),
-      "Err(EdnError { code: Serde(\"can't convert Err(TryFromIntError(())) into u32\"), line: None, column: None, ptr: None })"
+      "Err(EdnError { code: Serde(\"can't convert 4294967296 into u32\"), line: None, column: None, ptr: None })"
     );
     assert_eq!(
       format!("{:?}", from_str::<u64>("-1")),
-      "Err(EdnError { code: Serde(\"can't convert Err(TryFromIntError(())) into u64\"), line: None, column: None, ptr: None })"
+      "Err(EdnError { code: Serde(\"can't convert -1 into u64\"), line: None, column: None, ptr: None })"
     );
   }
 
@@ -193,7 +199,7 @@ mod test {
     assert_eq!(from_str::<Vec<u8>>("(1 2 3)").unwrap(), vec![1, 2, 3]);
     assert_eq!(
       format!("{:?}", from_str::<Vec<u8>>("[256]")),
-      "Err(EdnError { code: Serde(\"can't convert Err(TryFromIntError(())) into u8\"), line: None, column: None, ptr: None })"
+      "Err(EdnError { code: Serde(\"can't convert 256 into u8\"), line: None, column: None, ptr: None })"
     );
   }
 
