@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use clojure_reader::edn::{self, Edn};
 
 #[macro_export]
@@ -24,6 +26,7 @@ fn empty() {
 	display!("()");
 	display!("{}");
 	display!("#{}");
+	assert_eq!(format!("{:#}", Edn::Map(BTreeMap::new())), "{}");
 }
 
 #[test]
@@ -35,6 +38,78 @@ fn chars() {
 fn strings_are_not_escaped() {
 	let value = "a\"b\\c\n\r\t\u{0001}";
 	assert_eq!(format!("{}", Edn::Str(value)), format!("\"{value}\""));
+}
+
+#[test]
+fn pretty() {
+	let edn = edn::read_string(
+    r#"#app/config {:empty [], :items [{:name "Gato", :roles #{:admin :user}} {:name "Nyanko", :roles #{}}], :pair (1 2)}"#,
+  )
+  .unwrap();
+	let expected = r#"#app/config {
+	:empty [],
+	:items [
+		{
+			:name "Gato",
+			:roles #{
+				:admin
+				:user
+			}
+		}
+		{
+			:name "Nyanko",
+			:roles #{}
+		}
+	],
+	:pair (
+		1
+		2
+	)
+}"#;
+
+	let pretty = format!("{edn:#}");
+	assert_eq!(pretty, expected);
+	assert_eq!(edn::read_string(&pretty).unwrap(), edn);
+}
+
+fn nested_vectors(mut edn: Edn<'static>, depth: usize) -> Edn<'static> {
+	for _ in 0..depth {
+		edn = Edn::Vector(vec![edn]);
+	}
+	edn
+}
+
+#[test]
+fn pretty_falls_back_to_compact_formatting() {
+	let edn = nested_vectors(Edn::Int(0), 45);
+	let pretty = format!("{edn:#}");
+	let compact_line = format!("{}[[[0]]]", "\t".repeat(42));
+
+	assert!(pretty.lines().any(|line| line == compact_line));
+	assert_eq!(
+		pretty.lines().map(|line| line.chars().take_while(|c| *c == '\t').count()).max(),
+		Some(42)
+	);
+	assert_eq!(edn::read_string(&pretty).unwrap(), edn);
+
+	let deeper = format!("{:#}", nested_vectors(Edn::Int(0), 145));
+	assert_eq!(deeper.len() - pretty.len(), 200);
+}
+
+#[test]
+fn compact_fallback_preserves_collection_separators() {
+	let indent = "\t".repeat(42);
+	let sequence = nested_vectors(Edn::Vector(vec![Edn::Int(1), Edn::Int(2)]), 42);
+	let map = nested_vectors(
+		Edn::Map(BTreeMap::from([(Edn::Key("a"), Edn::Int(1)), (Edn::Key("b"), Edn::Int(2))])),
+		42,
+	);
+
+	for (edn, compact_line) in [(sequence, "[1 2]"), (map, "{:a 1, :b 2}")] {
+		let pretty = format!("{edn:#}");
+		assert!(pretty.lines().any(|line| line == format!("{indent}{compact_line}")));
+		assert_eq!(edn::read_string(&pretty).unwrap(), edn);
+	}
 }
 
 #[test]

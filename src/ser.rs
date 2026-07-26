@@ -5,12 +5,14 @@ use core::fmt::{Display, Write};
 
 use serde::{Serialize, ser};
 
+use crate::edn::MAX_PRETTY_DEPTH;
 use crate::error::{Code, Error, Result};
 
 #[derive(Debug)]
 pub struct Serializer {
 	output: String,
 	compound_is_empty: Vec<bool>,
+	pretty: bool,
 }
 
 impl Serializer {
@@ -19,24 +21,45 @@ impl Serializer {
 		self.compound_is_empty.push(true);
 	}
 
+	const fn current_compound_is_pretty(&self) -> bool {
+		self.pretty && self.compound_is_empty.len() <= MAX_PRETTY_DEPTH
+	}
+
 	fn write_separator(&mut self, separator: &str) -> Result<()> {
+		let pretty = self.current_compound_is_pretty();
 		let compound_is_empty = self
 			.compound_is_empty
 			.last_mut()
 			.ok_or_else(|| ser::Error::custom("serializer compound state missing"))?;
-		if *compound_is_empty {
-			*compound_is_empty = false;
-		} else {
+		let is_first = *compound_is_empty;
+		*compound_is_empty = false;
+
+		if pretty {
+			if !is_first && separator.starts_with(',') {
+				self.output.push(',');
+			}
+			self.output.push('\n');
+			for _ in 0..self.compound_is_empty.len() {
+				self.output += "\t";
+			}
+		} else if !is_first {
 			self.output += separator;
 		}
 		Ok(())
 	}
 
 	fn end_compound(&mut self, closer: &str) -> Result<()> {
-		self
+		let pretty = self.current_compound_is_pretty();
+		let is_empty = self
 			.compound_is_empty
 			.pop()
 			.ok_or_else(|| ser::Error::custom("serializer compound state missing"))?;
+		if pretty && !is_empty {
+			self.output.push('\n');
+			for _ in 0..self.compound_is_empty.len() {
+				self.output += "\t";
+			}
+		}
 		self.output += closer;
 		Ok(())
 	}
@@ -59,8 +82,32 @@ pub fn to_string<T>(value: &T) -> Result<String>
 where
 	T: Serialize,
 {
+	to_string_with_style(value, false)
+}
+
+/// Serializes a value to an indented EDN `String`.
+///
+/// Empty collections remain on one line and each item or map entry in a non-empty collection is
+/// indented by one tab per nesting level. Deeply nested subtrees fall back to compact formatting
+/// to bound indentation overhead.
+///
+/// # Errors
+///
+/// See [`crate::error::Error`].
+/// Always returns `Code::Serde`.
+pub fn to_string_pretty<T>(value: &T) -> Result<String>
+where
+	T: Serialize,
+{
+	to_string_with_style(value, true)
+}
+
+fn to_string_with_style<T>(value: &T, pretty: bool) -> Result<String>
+where
+	T: Serialize,
+{
 	let mut serializer =
-		Serializer { output: String::with_capacity(128), compound_is_empty: Vec::new() };
+		Serializer { output: String::with_capacity(128), compound_is_empty: Vec::new(), pretty };
 	value.serialize(&mut serializer)?;
 	Ok(serializer.output)
 }

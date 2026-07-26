@@ -6,9 +6,117 @@ mod test {
 	use alloc::string::String;
 	use alloc::vec::Vec;
 
-	use clojure_reader::ser::to_string;
+	use clojure_reader::ser::{to_string, to_string_pretty};
 	use serde::ser;
 	use serde_derive::Serialize;
+
+	#[test]
+	fn pretty() {
+		#[derive(Serialize)]
+		struct Person {
+			name: String,
+			roles: Vec<String>,
+		}
+
+		#[derive(Serialize)]
+		struct Team {
+			name: String,
+			people: Vec<Person>,
+			metadata: BTreeMap<String, String>,
+		}
+
+		let team = Team {
+			name: "Readers".to_string(),
+			people: vec![
+				Person {
+					name: "caTEXAS".to_string(),
+					roles: vec!["admin".to_string(), "user".to_string()],
+				},
+				Person { name: "CAt".to_string(), roles: Vec::new() },
+			],
+			metadata: BTreeMap::from([
+				("region".to_string(), "Chat Land".to_string()),
+				("tier".to_string(), "silly".to_string()),
+			]),
+		};
+		let expected = r#"{
+	:name "Readers",
+	:people [
+		{
+			:name "caTEXAS",
+			:roles [
+				"admin"
+				"user"
+			]
+		}
+		{
+			:name "CAt",
+			:roles []
+		}
+	],
+	:metadata {
+		"region" "Chat Land",
+		"tier" "silly"
+	}
+}"#;
+
+		let pretty = to_string_pretty(&team).unwrap();
+		assert_eq!(pretty, expected);
+		assert_eq!(clojure_reader::to_string_pretty(&team).unwrap(), expected);
+		assert!(clojure_reader::edn::read_string(&pretty).is_ok());
+	}
+
+	#[derive(Serialize)]
+	#[serde(untagged)]
+	enum Nested {
+		Scalar(i64),
+		Sequence(Vec<Self>),
+		Map(BTreeMap<String, Self>),
+	}
+
+	fn nested_sequences(mut value: Nested, depth: usize) -> Nested {
+		for _ in 0..depth {
+			value = Nested::Sequence(vec![value]);
+		}
+		value
+	}
+
+	#[test]
+	fn pretty_falls_back_to_compact_formatting() {
+		let pretty = to_string_pretty(&nested_sequences(Nested::Scalar(0), 45)).unwrap();
+		let compact_line = alloc::format!("{}[[[0]]]", "\t".repeat(42));
+
+		assert!(pretty.lines().any(|line| line == compact_line));
+		assert_eq!(
+			pretty.lines().map(|line| line.chars().take_while(|c| *c == '\t').count()).max(),
+			Some(42)
+		);
+		assert!(clojure_reader::edn::read_string(&pretty).is_ok());
+		assert_eq!(to_string(&nested_sequences(Nested::Scalar(0), 3)).unwrap(), "[[[0]]]");
+
+		let deeper = to_string_pretty(&nested_sequences(Nested::Scalar(0), 145)).unwrap();
+		assert_eq!(deeper.len() - pretty.len(), 200);
+	}
+
+	#[test]
+	fn compact_fallback_preserves_collection_separators() {
+		let indent = "\t".repeat(42);
+		let sequence =
+			nested_sequences(Nested::Sequence(vec![Nested::Scalar(1), Nested::Scalar(2)]), 42);
+		let map = nested_sequences(
+			Nested::Map(BTreeMap::from([
+				("a".to_string(), Nested::Scalar(1)),
+				("b".to_string(), Nested::Scalar(2)),
+			])),
+			42,
+		);
+
+		for (value, compact_line) in [(sequence, "[1 2]"), (map, r#"{"a" 1, "b" 2}"#)] {
+			let pretty = to_string_pretty(&value).unwrap();
+			assert!(pretty.lines().any(|line| line == alloc::format!("{indent}{compact_line}")));
+			assert!(clojure_reader::edn::read_string(&pretty).is_ok());
+		}
+	}
 
 	#[test]
 	fn maybe() {

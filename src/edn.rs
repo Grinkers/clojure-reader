@@ -1,7 +1,9 @@
 //! An EDN reader/presenter in Rust.
 //!
 //! ## Implementations
-//! -  [`core::fmt::Display`] will output valid EDN for any Edn object
+//! -  [`core::fmt::Display`] will output valid EDN for any Edn object. Alternate formatting
+//!    (`{edn:#}`) outputs indented EDN, with deeply nested subtrees falling back to compact
+//!    formatting to bound indentation overhead.
 //! -  With the `unstable` feature enabled, [`TryFrom`]<[`parse::Node`]> implemented for [`Edn`]
 //!    will convert the Node into an Edn
 //!
@@ -47,6 +49,7 @@ pub enum Edn<'e> {
 }
 
 const SYMBOL_SPECIAL_CHARS: &str = ".*+!-_?$%&=<>:#";
+pub(crate) const MAX_PRETTY_DEPTH: usize = 42;
 
 fn is_symbol_char(c: char) -> bool {
 	c.is_alphanumeric() || SYMBOL_SPECIAL_CHARS.contains(c)
@@ -275,59 +278,50 @@ pub(crate) const fn char_to_edn(c: char) -> Option<&'static str> {
 	}
 }
 
-impl fmt::Display for Edn<'_> {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+fn write_indent(f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
+	for _ in 0..depth {
+		f.write_str("\t")?;
+	}
+	Ok(())
+}
+
+impl Edn<'_> {
+	fn fmt_edn(&self, f: &mut fmt::Formatter<'_>, pretty: bool, depth: usize) -> fmt::Result {
+		let pretty = pretty && depth < MAX_PRETTY_DEPTH;
 		match self {
-			Self::Vector(v) => {
-				write!(f, "[")?;
-				let mut it = v.iter().peekable();
-				while let Some(i) = it.next() {
-					if it.peek().is_some() {
-						write!(f, "{i} ")?;
-					} else {
-						write!(f, "{i}")?;
-					}
-				}
-				write!(f, "]")
-			}
-			Self::Set(s) => {
-				write!(f, "#{{")?;
-				let mut it = s.iter().peekable();
-				while let Some(i) = it.next() {
-					if it.peek().is_some() {
-						write!(f, "{i} ")?;
-					} else {
-						write!(f, "{i}")?;
-					}
-				}
-				write!(f, "}}")
-			}
+			Self::Vector(v) => Self::fmt_sequence(f, "[", "]", v, pretty, depth),
+			Self::Set(s) => Self::fmt_sequence(f, "#{", "}", s, pretty, depth),
 			Self::Map(m) => {
-				write!(f, "{{")?;
-				let mut it = m.iter().peekable();
-				while let Some(kv) = it.next() {
-					if it.peek().is_some() {
-						write!(f, "{} {}, ", kv.0, kv.1)?;
-					} else {
-						write!(f, "{} {}", kv.0, kv.1)?;
+				f.write_str("{")?;
+				let mut entries = m.iter().peekable();
+				while let Some((key, value)) = entries.next() {
+					if pretty {
+						f.write_str("\n")?;
+						write_indent(f, depth + 1)?;
+					}
+					key.fmt_edn(f, pretty, depth + 1)?;
+					f.write_str(" ")?;
+					value.fmt_edn(f, pretty, depth + 1)?;
+					if entries.peek().is_some() {
+						if pretty {
+							f.write_str(",")?;
+						} else {
+							f.write_str(", ")?;
+						}
 					}
 				}
-				write!(f, "}}")
-			}
-			Self::List(l) => {
-				write!(f, "(")?;
-				let mut it = l.iter().peekable();
-				while let Some(i) = it.next() {
-					if it.peek().is_some() {
-						write!(f, "{i} ")?;
-					} else {
-						write!(f, "{i}")?;
-					}
+				if pretty && !m.is_empty() {
+					f.write_str("\n")?;
+					write_indent(f, depth)?;
 				}
-				write!(f, ")")
+				f.write_str("}")
 			}
+			Self::List(l) => Self::fmt_sequence(f, "(", ")", l, pretty, depth),
 			Self::Symbol(sy) => write!(f, "{sy}"),
-			Self::Tagged(t, s) => write!(f, "#{t} {s}"),
+			Self::Tagged(t, value) => {
+				write!(f, "#{t} ")?;
+				value.fmt_edn(f, pretty, depth)
+			}
 			Self::Key(k) => write!(f, ":{k}"),
 			Self::Str(s) => write!(f, "\"{s}\""),
 			Self::Int(i) => write!(f, "{i}"),
@@ -340,13 +334,52 @@ impl fmt::Display for Edn<'_> {
 			Self::Rational((n, d)) => write!(f, "{n}/{d}"),
 			Self::Bool(b) => write!(f, "{b}"),
 			Self::Char(c) => {
-				write!(f, "\\")?;
+				f.write_str("\\")?;
 				if let Some(c) = char_to_edn(*c) {
-					return write!(f, "{c}");
+					return f.write_str(c);
 				}
 				write!(f, "{c}")
 			}
-			Self::Nil => write!(f, "nil"),
+			Self::Nil => f.write_str("nil"),
 		}
+	}
+
+	fn fmt_sequence<'a, I>(
+		f: &mut fmt::Formatter<'_>,
+		opener: &str,
+		closer: &str,
+		items: I,
+		pretty: bool,
+		depth: usize,
+	) -> fmt::Result
+	where
+		I: IntoIterator<Item = &'a Self>,
+		Self: 'a,
+	{
+		f.write_str(opener)?;
+		let mut items = items.into_iter().peekable();
+		let mut has_items = false;
+		while let Some(item) = items.next() {
+			has_items = true;
+			if pretty {
+				f.write_str("\n")?;
+				write_indent(f, depth + 1)?;
+			}
+			item.fmt_edn(f, pretty, depth + 1)?;
+			if !pretty && items.peek().is_some() {
+				f.write_str(" ")?;
+			}
+		}
+		if pretty && has_items {
+			f.write_str("\n")?;
+			write_indent(f, depth)?;
+		}
+		f.write_str(closer)
+	}
+}
+
+impl fmt::Display for Edn<'_> {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		self.fmt_edn(f, f.alternate(), 0)
 	}
 }

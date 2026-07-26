@@ -13,7 +13,7 @@ pub mod error;
 #[cfg(feature = "serde")]
 pub use de::from_str;
 #[cfg(feature = "serde")]
-pub use ser::to_string;
+pub use ser::{to_string, to_string_pretty};
 
 #[cfg(feature = "serde")]
 pub mod de;
