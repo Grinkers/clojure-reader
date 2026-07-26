@@ -2,45 +2,45 @@ use clojure_reader::edn::{self};
 
 #[test]
 fn invalid_edn() {
-  assert!(edn::read_string("{:foo 42 :foo 43}").is_err());
-  assert!(edn::read_string("{:[0x42] 42}").is_err());
-  assert!(edn::read_string("{:foo 42 :bar").is_err());
-  assert!(edn::read_string("{:foo 42 :bar)").is_err());
-  assert!(edn::read_string("#{1 2 3]").is_err());
-  assert!(edn::read_string("#{1 2 3").is_err());
-  assert!(edn::read_string("#_").is_err());
-  assert!(edn::read_string(r#""\foo""#).is_err());
-  assert!(edn::read_string(r#""foo"#).is_err());
-  assert!(edn::read_string("\\cats").is_err());
-  assert!(edn::read_string("42/").is_err());
-  assert!(edn::read_string("1/0").is_err());
-  assert!(edn::read_string("1/-2").is_err());
-  assert!(edn::read_string("1/+2").is_err());
-  assert!(edn::read_string("1İr10").is_err());
-  assert!(edn::read_string("#[]").is_err());
-  assert!(edn::read_string("# tag nil").is_err());
-  assert!(edn::read_string("# :foo{:bar 1}").is_err());
-  assert!(edn::read_string("#4 2").is_err());
-  assert!(edn::read_string("#42 \"wut\"").is_err());
-  assert!(edn::read_string(r#"#"regex" nil"#).is_err());
-  assert!(edn::read_string("#foo/bar/baz nil").is_err());
-  assert!(edn::read_string("#foo/ nil").is_err());
-  assert!(edn::read_string("#foo//bar nil").is_err());
-  assert!(edn::read_string("#foo/42 nil").is_err());
-  assert!(edn::read_string("#foo/:bar nil").is_err());
-  assert!(edn::read_string("#foo/#bar nil").is_err());
-  assert!(edn::read_string("#foo/-42 nil").is_err());
-  assert!(edn::read_string("#foo/+42 nil").is_err());
-  assert!(edn::read_string("#foo/.42 nil").is_err());
-  assert!(edn::read_string("#foo|bar nil").is_err());
-  assert!(edn::read_string("#foo@bar nil").is_err());
-  assert!(edn::read_string("#:foo 1").is_err());
+	assert!(edn::read_string("{:foo 42 :foo 43}").is_err());
+	assert!(edn::read_string("{:[0x42] 42}").is_err());
+	assert!(edn::read_string("{:foo 42 :bar").is_err());
+	assert!(edn::read_string("{:foo 42 :bar)").is_err());
+	assert!(edn::read_string("#{1 2 3]").is_err());
+	assert!(edn::read_string("#{1 2 3").is_err());
+	assert!(edn::read_string("#_").is_err());
+	assert!(edn::read_string(r#""\foo""#).is_err());
+	assert!(edn::read_string(r#""foo"#).is_err());
+	assert!(edn::read_string("\\cats").is_err());
+	assert!(edn::read_string("42/").is_err());
+	assert!(edn::read_string("1/0").is_err());
+	assert!(edn::read_string("1/-2").is_err());
+	assert!(edn::read_string("1/+2").is_err());
+	assert!(edn::read_string("1İr10").is_err());
+	assert!(edn::read_string("#[]").is_err());
+	assert!(edn::read_string("# tag nil").is_err());
+	assert!(edn::read_string("# :foo{:bar 1}").is_err());
+	assert!(edn::read_string("#4 2").is_err());
+	assert!(edn::read_string("#42 \"wut\"").is_err());
+	assert!(edn::read_string(r#"#"regex" nil"#).is_err());
+	assert!(edn::read_string("#foo/bar/baz nil").is_err());
+	assert!(edn::read_string("#foo/ nil").is_err());
+	assert!(edn::read_string("#foo//bar nil").is_err());
+	assert!(edn::read_string("#foo/42 nil").is_err());
+	assert!(edn::read_string("#foo/:bar nil").is_err());
+	assert!(edn::read_string("#foo/#bar nil").is_err());
+	assert!(edn::read_string("#foo/-42 nil").is_err());
+	assert!(edn::read_string("#foo/+42 nil").is_err());
+	assert!(edn::read_string("#foo/.42 nil").is_err());
+	assert!(edn::read_string("#foo|bar nil").is_err());
+	assert!(edn::read_string("#foo@bar nil").is_err());
+	assert!(edn::read_string("#:foo 1").is_err());
 
-  let edn = "{
+	let edn = "{
               :cat \"猫\"
               :num -0x9042
               :floating-num 9042.9420
               :data [1 4 2]
               :lisp (car (cdr) cdrrdrdrr (so (many (parens ())))}";
-  assert!(edn::read_string(edn).is_err());
+	assert!(edn::read_string(edn).is_err());
 }

@@ -1,4 +1,5 @@
 edition = "2024"
+hard_tabs = true
 style_edition = "2024"
 tab_spaces = 2
 use_small_heuristics = "max"
