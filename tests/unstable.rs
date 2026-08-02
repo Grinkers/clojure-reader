@@ -8,13 +8,21 @@ mod test {
 
 	#[test]
 	fn node_try_into_edn_matches_read_string() {
-		let input = r#"#_ :ignored {:foo [1 #_2 {:bar nil}] :baz #{true #_false :qux} :tagged #inst "1985-04-12T23:20:50.52Z"} trailing"#;
+		use std::borrow::Cow;
+
+		let input = r#"#_ :ignored {:foo [1 #_2 {:bar nil}] :baz #{true #_false :qux} :tagged #inst "1985-04-12T23:20:50.52Z" :escaped "a\nb"} trailing"#;
 
 		let mut reader = SourceReader::new(input);
 		let node = parse::parse(&mut reader).unwrap();
 		let edn = Edn::try_from(node).unwrap();
 
 		assert_eq!(edn, edn::read_string(input).unwrap());
+		let Edn::Map(values) = &edn else { panic!() };
+		assert!(values.keys().any(|value| matches!(value, Edn::Key(Cow::Borrowed("foo")))));
+		assert!(values.values().any(|value| matches!(value, Edn::Tagged(Cow::Borrowed("inst"), _))));
+		assert!(
+			values.values().any(|value| matches!(value, Edn::Str(Cow::Owned(value)) if value == "a\nb"))
+		);
 		assert_eq!(reader.remaining(), " trailing");
 	}
 
@@ -79,7 +87,7 @@ mod test {
 		);
 		assert_eq!(
 			Edn::try_from(node).unwrap(),
-			Edn::List(vec![Edn::Symbol("sym"), Edn::Rational((3, 2)), Edn::Char('z')])
+			Edn::List(vec![Edn::Symbol("sym".into()), Edn::Rational((3, 2)), Edn::Char('z')])
 		);
 
 		#[cfg(feature = "floats")]

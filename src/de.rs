@@ -1,3 +1,4 @@
+use alloc::borrow::Cow;
 use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::ToString;
@@ -27,20 +28,8 @@ where
 	let (edn, remaining) = parse::parse_as_edn(s)?;
 	let t = T::deserialize(edn)?;
 
-	let mut remaining = remaining;
-	loop {
-		remaining = remaining.trim_start_matches(|c: char| c == ',' || c.is_whitespace());
-
-		let Some(comment) = remaining.strip_prefix(';') else {
-			break;
-		};
-
-		let Some(comment_end) = comment.find(['\n', '\r']) else {
-			return Ok(t);
-		};
-		remaining = &comment[comment_end..];
-	}
-	if !remaining.is_empty() {
+	let (trailing, _) = parse::parse_optional_edn(remaining)?;
+	if trailing.is_some() {
 		return Err(de::Error::custom("trailing input"));
 	}
 	Ok(t)
@@ -73,7 +62,7 @@ fn get_bytes_from_edn(edn: &Edn<'_>) -> Result<Vec<u8>> {
 	}
 }
 
-impl<'de> de::Deserializer<'de> for Edn<'de> {
+impl<'de, 'edn: 'de> de::Deserializer<'de> for Edn<'edn> {
 	type Error = Error;
 
 	fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
@@ -81,8 +70,12 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
 		V: Visitor<'de>,
 	{
 		match self {
-			Edn::Key(k) => visitor.visit_borrowed_str(k),
-			Edn::Str(s) | Edn::Symbol(s) => visitor.visit_borrowed_str(s),
+			Edn::Key(Cow::Borrowed(value))
+			| Edn::Symbol(Cow::Borrowed(value))
+			| Edn::Str(Cow::Borrowed(value)) => visitor.visit_borrowed_str(value),
+			Edn::Key(Cow::Owned(value))
+			| Edn::Symbol(Cow::Owned(value))
+			| Edn::Str(Cow::Owned(value)) => visitor.visit_string(value),
 			Edn::Int(i) => visitor.visit_i64(i),
 			#[cfg(feature = "floats")]
 			Edn::Double(d) => visitor.visit_f64(*d),
@@ -310,16 +303,44 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
 			return Err(de::Error::custom(format!("can't convert {self:?} into Tagged for enum")));
 		};
 
-		let mut split = tag.split('/');
-		let (Some(tag_first), Some(tag_second)) = (split.next(), split.next()) else {
-			return Err(de::Error::custom(format!("Expected namespace in {tag} for Tagged for enum")));
+		let variant = match tag {
+			Cow::Borrowed(tag) => {
+				let Some((tag_first, tag_second)) = tag.split_once('/') else {
+					return Err(de::Error::custom(format!(
+						"Expected namespace in {tag} for Tagged for enum"
+					)));
+				};
+				if tag_second.contains('/') {
+					return Err(de::Error::custom(format!(
+						"Expected one namespace in {tag} for Tagged for enum"
+					)));
+				}
+
+				if name != tag_first {
+					return Err(de::Error::custom(format!("namespace in {tag} can't be matched to {name}")));
+				}
+				Cow::Borrowed(tag_second)
+			}
+			Cow::Owned(tag) => {
+				let Some((tag_first, tag_second)) = tag.split_once('/') else {
+					return Err(de::Error::custom(format!(
+						"Expected namespace in {tag} for Tagged for enum"
+					)));
+				};
+				if tag_second.contains('/') {
+					return Err(de::Error::custom(format!(
+						"Expected one namespace in {tag} for Tagged for enum"
+					)));
+				}
+
+				if name != tag_first {
+					return Err(de::Error::custom(format!("namespace in {tag} can't be matched to {name}")));
+				}
+				Cow::Owned(tag_second.to_string())
+			}
 		};
 
-		if name != tag_first {
-			return Err(de::Error::custom(format!("namespace in {tag} can't be matched to {name}")));
-		}
-
-		visitor.visit_enum(EnumEdn::new(*edn, tag_second))
+		visitor.visit_enum(EnumEdn::new(*edn, variant))
 	}
 
 	fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value>
@@ -327,23 +348,28 @@ impl<'de> de::Deserializer<'de> for Edn<'de> {
 		V: Visitor<'de>,
 	{
 		match self {
-			Edn::Key(k) | Edn::Str(k) | Edn::Symbol(k) => visitor.visit_borrowed_str(k),
+			Edn::Key(Cow::Borrowed(value))
+			| Edn::Symbol(Cow::Borrowed(value))
+			| Edn::Str(Cow::Borrowed(value)) => visitor.visit_borrowed_str(value),
+			Edn::Key(Cow::Owned(value))
+			| Edn::Symbol(Cow::Owned(value))
+			| Edn::Str(Cow::Owned(value)) => visitor.visit_string(value),
 			other => visitor.visit_string(other.to_string()),
 		}
 	}
 }
 
-struct SeqEdn<'de> {
-	de: Vec<Edn<'de>>,
+struct SeqEdn<'edn> {
+	de: Vec<Edn<'edn>>,
 }
 
-impl<'de> SeqEdn<'de> {
-	const fn new(de: Vec<Edn<'de>>) -> Self {
+impl<'edn> SeqEdn<'edn> {
+	const fn new(de: Vec<Edn<'edn>>) -> Self {
 		SeqEdn { de }
 	}
 }
 
-impl<'de> SeqAccess<'de> for SeqEdn<'de> {
+impl<'de, 'edn: 'de> SeqAccess<'de> for SeqEdn<'edn> {
 	type Error = Error;
 
 	fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
@@ -358,18 +384,18 @@ impl<'de> SeqAccess<'de> for SeqEdn<'de> {
 	}
 }
 
-struct MapEdn<'de> {
-	de: BTreeMap<Edn<'de>, Edn<'de>>,
-	pending_value: Option<Edn<'de>>,
+struct MapEdn<'edn> {
+	de: BTreeMap<Edn<'edn>, Edn<'edn>>,
+	pending_value: Option<Edn<'edn>>,
 }
 
-impl<'de> MapEdn<'de> {
-	const fn new(de: BTreeMap<Edn<'de>, Edn<'de>>) -> Self {
+impl<'edn> MapEdn<'edn> {
+	const fn new(de: BTreeMap<Edn<'edn>, Edn<'edn>>) -> Self {
 		MapEdn { de, pending_value: None }
 	}
 }
 
-impl<'de> MapAccess<'de> for MapEdn<'de> {
+impl<'de, 'edn: 'de> MapAccess<'de> for MapEdn<'edn> {
 	type Error = Error;
 
 	fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>>
@@ -396,31 +422,36 @@ impl<'de> MapAccess<'de> for MapEdn<'de> {
 }
 
 #[derive(Debug)]
-struct EnumEdn<'de> {
-	de: Edn<'de>,
-	variant: &'de str,
+struct EnumEdn<'edn> {
+	de: Edn<'edn>,
+	variant: Cow<'edn, str>,
 }
 
-impl<'de> EnumEdn<'de> {
-	const fn new(de: Edn<'de>, variant: &'de str) -> Self {
+impl<'edn> EnumEdn<'edn> {
+	const fn new(de: Edn<'edn>, variant: Cow<'edn, str>) -> Self {
 		EnumEdn { de, variant }
 	}
 }
 
-impl<'de> EnumAccess<'de> for EnumEdn<'de> {
+#[derive(Debug)]
+struct VariantEdn<'edn> {
+	de: Edn<'edn>,
+}
+
+impl<'de, 'edn: 'de> EnumAccess<'de> for EnumEdn<'edn> {
 	type Error = Error;
-	type Variant = Self;
+	type Variant = VariantEdn<'edn>;
 
 	fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant)>
 	where
 		V: DeserializeSeed<'de>,
 	{
-		let val = seed.deserialize(self.variant.into_deserializer())?;
-		Ok((val, self))
+		let val = seed.deserialize(self.variant.as_ref().into_deserializer())?;
+		Ok((val, VariantEdn { de: self.de }))
 	}
 }
 
-impl<'de> VariantAccess<'de> for EnumEdn<'de> {
+impl<'de, 'edn: 'de> VariantAccess<'de> for VariantEdn<'edn> {
 	type Error = Error;
 
 	fn unit_variant(self) -> Result<()> {
