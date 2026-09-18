@@ -10,9 +10,9 @@ fn maybe_forty_two<'a>(edn: &'a Edn<'a>) -> Option<&'a Edn<'a>> {
 	//   (get {:foo :bar})
 	//   (nth 2))
 	edn
-		.get(&Edn::Key("foo"))?
-		.get(&Edn::Symbol("猫"))?
-		.get(&Edn::Map(BTreeMap::from([(Edn::Key("foo"), Edn::Key("bar"))])))?
+		.get(&Edn::Key("foo".into()))?
+		.get(&Edn::Symbol("猫".into()))?
+		.get(&Edn::Map(BTreeMap::from([(Edn::Key("foo".into()), Edn::Key("bar".into()))])))?
 		.nth(2)
 }
 
@@ -23,24 +23,24 @@ fn namespace_get_contains() {
 	// (get edn-data 42)          -> 24
 	assert_eq!(edn_data.get(&Edn::Int(42)), Some(&Edn::Int(24)));
 	// (get edn-data :foo)        -> nil
-	assert_eq!(edn_data.get(&Edn::Key("foo")), None);
+	assert_eq!(edn_data.get(&Edn::Key("foo".into())), None);
 	// (get edn-data :thingy/foo) -> "bar"
-	assert_eq!(edn_data.get(&Edn::Key("thingy/foo")), Some(&Edn::Str("bar")));
+	assert_eq!(edn_data.get(&Edn::Key("thingy/foo".into())), Some(&Edn::Str("bar".into())));
 	// (get edn-data :baz/bar)    -> "qux"
-	assert_eq!(edn_data.get(&Edn::Key("baz/bar")), Some(&Edn::Str("qux")));
+	assert_eq!(edn_data.get(&Edn::Key("baz/bar".into())), Some(&Edn::Str("qux".into())));
 
 	// (contains? edn-data 42) -> true
 	assert!(edn_data.contains(&Edn::Int(42)));
 	// (contains? edn-data "42") -> false
-	assert!(!edn_data.contains(&Edn::Str("42")));
+	assert!(!edn_data.contains(&Edn::Str("42".into())));
 	// (contains? edn-data :foo) -> false
-	assert!(!edn_data.contains(&Edn::Key("foo")));
+	assert!(!edn_data.contains(&Edn::Key("foo".into())));
 	// (contains? edn-data :thingy/foo) -> true
-	assert!(edn_data.contains(&Edn::Key("thingy/foo")));
+	assert!(edn_data.contains(&Edn::Key("thingy/foo".into())));
 	// (contains? edn-data :baz/bar) -> true
-	assert!(edn_data.contains(&Edn::Key("baz/bar")));
+	assert!(edn_data.contains(&Edn::Key("baz/bar".into())));
 	// (contains? edn-data :bar/baz) -> false
-	assert!(!edn_data.contains(&Edn::Key("bar/baz")));
+	assert!(!edn_data.contains(&Edn::Key("bar/baz".into())));
 }
 
 fn main() {

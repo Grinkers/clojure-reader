@@ -27,12 +27,15 @@ mod test {
 		assert_eq!(
 			edn::read_string(e).unwrap(),
 			Edn::Map(BTreeMap::from([
-				(Edn::Key("cat"), Edn::Str("猫")),
-				(Edn::Key("num"), Edn::Int(-36930)),
-				(Edn::Double((40.42).into()), Edn::Str("forty dot forty-two")),
-				(Edn::Map(BTreeMap::from([(Edn::Key("foo"), Edn::Str("bar"))])), Edn::Str("foobar")),
-				(Edn::Key("r"), Edn::Rational((42, 4242))),
-				(Edn::Key("lisp"), Edn::List(vec![Edn::List(vec![])])),
+				(Edn::Key("cat".into()), Edn::Str("猫".into())),
+				(Edn::Key("num".into()), Edn::Int(-36930)),
+				(Edn::Double((40.42).into()), Edn::Str("forty dot forty-two".into())),
+				(
+					Edn::Map(BTreeMap::from([(Edn::Key("foo".into()), Edn::Str("bar".into()))])),
+					Edn::Str("foobar".into())
+				),
+				(Edn::Key("r".into()), Edn::Rational((42, 4242))),
+				(Edn::Key("lisp".into()), Edn::List(vec![Edn::List(vec![])])),
 			]))
 		);
 	}

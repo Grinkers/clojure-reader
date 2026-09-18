@@ -1,6 +1,7 @@
 //! An EDN syntax parser in Rust.
 #![expect(clippy::inline_always)]
 
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
@@ -158,8 +159,11 @@ pub fn parse_as_edn(edn: &str) -> Result<(Edn<'_>, &str), Error> {
 }
 
 #[cfg_attr(not(feature = "unstable"), expect(clippy::redundant_pub_crate))]
-pub(crate) fn parse_optional_edn(edn: &str) -> Result<(Option<Edn<'_>>, &str), Error> {
-	let mut source_reader = SourceReader::new(edn);
+pub(crate) fn parse_optional_edn(
+	edn: &str,
+	offset: usize,
+) -> Result<(Option<Edn<'_>>, &str), Error> {
+	let mut source_reader = SourceReader { slice: edn, read_pos: Position::at(edn, offset) };
 	let parsed = {
 		let mut walker = Walker::new(&mut source_reader);
 		parse_internal(&mut walker, &EdnBuilder)?
@@ -178,6 +182,14 @@ pub struct Position {
 	pub line: usize,
 	pub column: usize,
 	pub ptr: usize,
+}
+
+impl Position {
+	pub(crate) fn at(source: &str, offset: usize) -> Self {
+		let mut reader = SourceReader::new(source);
+		while reader.read_pos.ptr < offset && reader.nibble_next().is_some() {}
+		reader.read_pos
+	}
 }
 
 impl Default for Position {
@@ -299,13 +311,11 @@ impl<'e> SourceReader<'e> {
 		let starting_ptr = self.read_pos.ptr;
 		let mut escape = false;
 		loop {
+			let position = self.read_pos;
 			if let Some(c) = self.nibble_next() {
 				if escape {
-					match c {
-						't' | 'r' | 'n' | '\\' | '"' => (),
-						_ => {
-							return Err(Error::from_position(Code::InvalidEscape, self.read_pos));
-						}
+					if crate::edn::unescape_char(c).is_none() {
+						return Err(Error::from_position(Code::InvalidEscape, position));
 					}
 					escape = false;
 				} else if c == '"' {
@@ -364,11 +374,13 @@ impl<'e> SourceReader<'e> {
 	fn nibble_next(&mut self) -> Option<char> {
 		let char = self.slice[self.read_pos.ptr..].chars().next();
 		if let Some(c) = char {
+			let crlf = c == '\n'
+				&& self.slice.get(..self.read_pos.ptr).is_some_and(|prefix| prefix.ends_with('\r'));
 			self.read_pos.ptr += c.len_utf8();
-			if c == '\n' {
+			if c == '\r' || (c == '\n' && !crlf) {
 				self.read_pos.line += 1;
 				self.read_pos.column = 1;
-			} else {
+			} else if !crlf {
 				self.read_pos.column += 1;
 			}
 		}
@@ -479,7 +491,6 @@ impl<'e, B: InternalParser<'e>> ParseContext<'e, B> {
 enum Atom<'e> {
 	Key(&'e str),
 	Symbol(&'e str),
-	Str(&'e str),
 	Int(i64),
 	#[cfg(feature = "floats")]
 	Double(OrderedFloat<f64>),
@@ -502,6 +513,8 @@ trait InternalParser<'e> {
 	type SetContext;
 
 	fn atom(&self, atom: Atom<'e>, span: Span) -> Self::Item;
+
+	fn string(&self, raw: &'e str, span: Span) -> Result<Self::Item, Error>;
 
 	fn with_leading_discards(
 		&self,
@@ -610,9 +623,8 @@ impl<'e> InternalParser<'e> for EdnBuilder {
 	fn atom(&self, atom: Atom<'e>, span: Span) -> Self::Item {
 		let _ = span;
 		match atom {
-			Atom::Key(key) => Edn::Key(key),
-			Atom::Symbol(symbol) => Edn::Symbol(symbol),
-			Atom::Str(str) => Edn::Str(str),
+			Atom::Key(key) => Edn::Key(Cow::Borrowed(key)),
+			Atom::Symbol(symbol) => Edn::Symbol(Cow::Borrowed(symbol)),
 			Atom::Int(int) => Edn::Int(int),
 			#[cfg(feature = "floats")]
 			Atom::Double(double) => Edn::Double(double),
@@ -625,6 +637,10 @@ impl<'e> InternalParser<'e> for EdnBuilder {
 			Atom::Bool(bool) => Edn::Bool(bool),
 			Atom::Nil => Edn::Nil,
 		}
+	}
+
+	fn string(&self, raw: &'e str, span: Span) -> Result<Self::Item, Error> {
+		crate::edn::decode_string(raw, span).map(Edn::Str)
 	}
 
 	fn with_leading_discards(
@@ -762,7 +778,7 @@ impl<'e> InternalParser<'e> for EdnBuilder {
 		if tag.starts_with(':') && !matches!(&value.item, Edn::Map(_)) {
 			return Err(Error::from_position(Code::InvalidTag, tag_span.0));
 		}
-		Ok(Parsed::new(Edn::Tagged(tag, Box::new(value.item)), span))
+		Ok(Parsed::new(Edn::Tagged(Cow::Borrowed(tag), Box::new(value.item)), span))
 	}
 
 	fn discard(
@@ -788,7 +804,6 @@ impl<'e> InternalParser<'e> for NodeBuilder {
 		let kind = match atom {
 			Atom::Key(key) => NodeKind::Key(key),
 			Atom::Symbol(symbol) => NodeKind::Symbol(symbol),
-			Atom::Str(str) => NodeKind::Str(str),
 			Atom::Int(int) => NodeKind::Int(int),
 			#[cfg(feature = "floats")]
 			Atom::Double(double) => NodeKind::Double(double),
@@ -803,6 +818,10 @@ impl<'e> InternalParser<'e> for NodeBuilder {
 		};
 
 		Node::no_discards(kind, span)
+	}
+
+	fn string(&self, raw: &'e str, span: Span) -> Result<Self::Item, Error> {
+		Ok(Node::no_discards(NodeKind::Str(raw), span))
 	}
 
 	fn with_leading_discards(
@@ -1153,14 +1172,21 @@ fn parse_internal<'e, B: InternalParser<'e>>(
 			}
 			Some(c) => {
 				let pos_start = walker.reader.read_pos;
-				let atom = match c {
-					'\\' => parse_char(walker.reader.slurp_char()).map(Atom::Char),
-					'"' => Ok(Atom::Str(walker.reader.slurp_str()?)),
-					_ => edn_literal(walker.reader.slurp_literal()),
-				}
-				.map_err(|code| Error::from_position(code, pos_start))?;
-				let span = walker.reader.span_from(pos_start);
-				let parsed = Parsed::new(builder.atom(atom, span), span);
+				let span;
+				let item = if c == '"' {
+					let raw = walker.reader.slurp_str()?;
+					span = walker.reader.span_from(pos_start);
+					builder.string(raw, span)?
+				} else {
+					let atom = match c {
+						'\\' => parse_char(walker.reader.slurp_char()).map(Atom::Char),
+						_ => edn_literal(walker.reader.slurp_literal()),
+					}
+					.map_err(|code| Error::from_position(code, pos_start))?;
+					span = walker.reader.span_from(pos_start);
+					builder.atom(atom, span)
+				};
+				let parsed = Parsed::new(item, span);
 
 				if let Some(parsed) = complete_value(walker, builder, parsed)? {
 					result = Some(parsed);

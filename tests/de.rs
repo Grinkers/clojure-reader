@@ -9,6 +9,9 @@ mod test {
 	use core::fmt;
 
 	use clojure_reader::de::from_str;
+	use clojure_reader::edn::Edn;
+	use clojure_reader::error::Code;
+	use serde::Deserialize as DeserializeTrait;
 	use serde::de::{self, Visitor};
 	use serde_derive::Deserialize;
 
@@ -24,8 +27,57 @@ mod test {
 		assert_eq!(format!("{res}"), expected);
 
 		assert_eq!("lol cats", from_str::<String>(r#""lol cats""#).unwrap());
+		assert_eq!("a\nb\tc\r\\\"", from_str::<String>(r#""a\nb\tc\r\\\"""#).unwrap());
+		assert!(from_str::<&str>(r#""a\nb""#).is_err());
 		assert_eq!("lol 猫s", from_str::<&str>(r#""lol 猫s""#).unwrap());
 		assert_eq!(false, from_str("false").unwrap());
+	}
+
+	#[test]
+	fn string_deserialization_borrows_and_owns() {
+		use alloc::borrow::Cow;
+
+		#[derive(Debug, Deserialize)]
+		struct Borrowing<'a> {
+			#[serde(borrow)]
+			value: Cow<'a, str>,
+		}
+
+		// An unescaped string can be zero-copy borrowed as `&str`.
+		assert_eq!("borrowed", from_str::<&str>(r#""borrowed""#).unwrap());
+
+		// An escaped string cannot be borrowed (it must be decoded into an owned buffer),
+		// so `&str` fails while `String` succeeds.
+		assert!(from_str::<&str>(r#""a\tb""#).is_err());
+		assert_eq!("a\tb", from_str::<String>(r#""a\tb""#).unwrap());
+
+		// Serde's borrowing Cow adapter preserves borrowed input and accepts decoded strings.
+		let plain: Borrowing<'_> = from_str(r#"{:value "plain"}"#).unwrap();
+		assert!(matches!(plain.value, Cow::Borrowed("plain")));
+		let escaped: Borrowing<'_> = from_str(r#"{:value "a\nb"}"#).unwrap();
+		assert!(matches!(escaped.value, Cow::Owned(ref value) if value == "a\nb"));
+
+		// Every supported escape decodes correctly through serde.
+		assert_eq!("\t\r\n\\\"", from_str::<String>(r#""\t\r\n\\\"""#).unwrap());
+
+		// Unsupported escapes surface as errors.
+		assert!(from_str::<String>(r#""\q""#).is_err());
+	}
+
+	#[test]
+	fn owned_edn_text_deserializes_without_borrowing() {
+		use alloc::borrow::Cow;
+
+		let key: String =
+			DeserializeTrait::deserialize(Edn::Key(Cow::Owned(String::from("key")))).unwrap();
+		assert_eq!(key, "key");
+		let symbol: String =
+			DeserializeTrait::deserialize(Edn::Symbol(Cow::Owned(String::from("symbol")))).unwrap();
+		assert_eq!(symbol, "symbol");
+
+		let borrowed: Result<&str, _> =
+			DeserializeTrait::deserialize(Edn::Key(Cow::Owned(String::from("key"))));
+		assert!(borrowed.is_err());
 	}
 
 	#[test]
@@ -47,8 +99,13 @@ mod test {
 		assert_eq!(42, from_str::<u8>("42 , \n").unwrap());
 		assert_eq!(42, from_str::<u8>("42 ; comment").unwrap());
 		assert_eq!(42, from_str::<u8>("42 ; comment\n").unwrap());
+		assert_eq!(42, from_str::<u8>("42 #_0").unwrap());
+		assert_eq!(42, from_str::<u8>("42 #_ [1 #_2 3] ; comment\n #_#tag {:a 1}").unwrap());
 		assert!(from_str::<u8>("42 43").is_err());
 		assert!(from_str::<u8>("42 ; comment\n43").is_err());
+		assert!(from_str::<u8>("42 #_0 43").is_err());
+		assert!(from_str::<u8>("42 #_").is_err());
+		assert!(from_str::<u8>("42 #_0 ]").is_err());
 	}
 
 	#[test]
@@ -384,6 +441,16 @@ mod test {
 		assert_eq!(E::Tuple(1, 2), from_str::<E>(r#"#E/Tuple [1 2]"#).unwrap());
 		assert_eq!(E::Struct { a: 1, b: 42 }, from_str::<E>(r#"#E/Struct {:a 1, :b 42}"#,).unwrap());
 
+		let owned = clojure_reader::edn::read_string(r#"#E/Tuple [1 2]"#).unwrap().into_owned();
+		assert_eq!(E::Tuple(1, 2), deserialize_owned_from_short_borrow(&owned));
+
+		fn deserialize_owned_from_short_borrow(value: &Edn<'static>) -> E {
+			DeserializeTrait::deserialize(value.clone()).unwrap()
+		}
+
+		let malformed = Edn::tagged(String::from("E/Unit/extra"), Edn::Nil);
+		assert!(E::deserialize(malformed).is_err());
+
 		assert_eq!(
 			format!("{:?}", from_str::<E>(r#"#B/Unit sillycat"#)),
 			"Err(EdnError { code: Serde(\"namespace in B/Unit can't be matched to E\"), line: None, column: None, ptr: None })"
@@ -440,5 +507,86 @@ mod test {
 			format!("{:?}", from_str::<SomeBytes<'_>>(r#"[4/2]"#)),
 			"Err(EdnError { code: Serde(\"can't convert Rational((4, 2)) into bytes\"), line: None, column: None, ptr: None })"
 		);
+	}
+
+	#[test]
+	fn trailing_parse_error_position_on_same_line_is_source_relative() {
+		let error = from_str::<u8>("    42 ]").unwrap_err();
+		assert_eq!(error.code, Code::UnmatchedDelimiter(']'));
+		assert_eq!(error.line, Some(1));
+		assert_eq!(error.column, Some(8));
+		assert_eq!(error.ptr, Some(7));
+	}
+
+	#[test]
+	fn trailing_parse_error_position_after_newlines_is_source_relative() {
+		let error = from_str::<u8>("\n\n42\n\n]").unwrap_err();
+		assert_eq!(error.code, Code::UnmatchedDelimiter(']'));
+		assert_eq!(error.line, Some(5));
+		assert_eq!(error.column, Some(1));
+		assert_eq!(error.ptr, Some(6));
+	}
+}
+
+#[cfg(feature = "serde")]
+mod borrowed_enum_variant {
+	use core::fmt;
+
+	use serde::{
+		Deserialize,
+		de::{self, DeserializeSeed, EnumAccess, VariantAccess, Visitor},
+	};
+
+	struct BorrowVariant;
+
+	impl<'de> DeserializeSeed<'de> for BorrowVariant {
+		type Value = &'de str;
+
+		fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+		where
+			D: de::Deserializer<'de>,
+		{
+			<&'de str>::deserialize(deserializer)
+		}
+	}
+
+	struct BorrowEnum;
+
+	impl<'de> Visitor<'de> for BorrowEnum {
+		type Value = &'de str;
+
+		fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+			formatter.write_str("an enum with a borrowed variant identifier")
+		}
+
+		fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
+		where
+			A: EnumAccess<'de>,
+		{
+			let (variant, access) = data.variant_seed(BorrowVariant)?;
+			access.unit_variant()?;
+			Ok(variant)
+		}
+	}
+
+	#[derive(Debug)]
+	struct BorrowedEnum<'a>(&'a str);
+
+	impl<'de> Deserialize<'de> for BorrowedEnum<'de> {
+		fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+		where
+			D: de::Deserializer<'de>,
+		{
+			deserializer.deserialize_enum("E", &["Unit"], BorrowEnum).map(Self)
+		}
+	}
+
+	#[test]
+	fn borrowed_enum_variant_identifier_is_supported() {
+		// Current failure: `&str::into_deserializer()` creates a transient
+		// `StrDeserializer`, not a `BorrowedStrDeserializer`, so the seed cannot
+		// obtain an `&'de str` even though the tag borrows from the source input.
+		let value: BorrowedEnum<'_> = clojure_reader::from_str("#E/Unit nil").unwrap();
+		assert_eq!(value.0, "Unit");
 	}
 }

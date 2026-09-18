@@ -8,12 +8,15 @@
 //!    will convert the Node into an Edn
 //!
 //! ## Differences from Clojure
-//! -  Escape characters are not escaped.
+//! -  String escape support is limited to `\\t`, `\\r`, `\\n`, `\\\\`, and `\\"`.
 
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
-use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::collections::{BTreeMap, BTreeSet, btree_map, btree_set};
+use alloc::string::String;
 use alloc::vec::Vec;
-use core::fmt;
+use core::cmp::Ordering;
+use core::{fmt, mem};
 
 #[cfg(feature = "arbitrary-nums")]
 use bigdecimal::BigDecimal;
@@ -24,18 +27,19 @@ use ordered_float::OrderedFloat;
 
 use crate::{error, parse};
 
-#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Hash)]
 #[non_exhaustive]
 pub enum Edn<'e> {
 	Vector(Vec<Self>),
 	Set(BTreeSet<Self>),
 	Map(BTreeMap<Self, Self>),
 	List(Vec<Self>),
-	Key(&'e str),
-	Symbol(&'e str),
-	Str(&'e str),
+	Key(Cow<'e, str>),
+	Symbol(Cow<'e, str>),
+	/// A decoded string. Strings without escapes borrow from the input; escaped strings are owned.
+	Str(Cow<'e, str>),
 	Int(i64),
-	Tagged(&'e str, Box<Self>),
+	Tagged(Cow<'e, str>, Box<Self>),
 	#[cfg(feature = "floats")]
 	Double(OrderedFloat<f64>),
 	Rational((i64, i64)),
@@ -46,6 +50,174 @@ pub enum Edn<'e> {
 	Char(char),
 	Bool(bool),
 	Nil,
+}
+
+impl Edn<'_> {
+	const fn order(&self) -> u8 {
+		match self {
+			Self::Vector(_) => 0,
+			Self::Set(_) => 1,
+			Self::Map(_) => 2,
+			Self::List(_) => 3,
+			Self::Key(_) => 4,
+			Self::Symbol(_) => 5,
+			Self::Str(_) => 6,
+			Self::Int(_) => 7,
+			Self::Tagged(..) => 8,
+			#[cfg(feature = "floats")]
+			Self::Double(_) => 9,
+			Self::Rational(_) => 10,
+			#[cfg(feature = "arbitrary-nums")]
+			Self::BigInt(_) => 11,
+			#[cfg(feature = "arbitrary-nums")]
+			Self::BigDec(_) => 12,
+			Self::Char(_) => 13,
+			Self::Bool(_) => 14,
+			Self::Nil => 15,
+		}
+	}
+}
+
+enum Children<'a, 'e> {
+	Sequence(core::slice::Iter<'a, Edn<'e>>),
+	Set(btree_set::Iter<'a, Edn<'e>>),
+	Map { entries: btree_map::Iter<'a, Edn<'e>, Edn<'e>>, value: Option<&'a Edn<'e>> },
+}
+
+impl<'a, 'e> Iterator for Children<'a, 'e> {
+	type Item = &'a Edn<'e>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		match self {
+			Self::Sequence(items) => items.next(),
+			Self::Set(items) => items.next(),
+			Self::Map { entries, value } => {
+				if let Some(value) = value.take() {
+					return Some(value);
+				}
+				let (key, next_value) = entries.next()?;
+				*value = Some(next_value);
+				Some(key)
+			}
+		}
+	}
+}
+
+enum Compare<'a, 'e> {
+	Values(&'a Edn<'e>, &'a Edn<'e>),
+	Children(Children<'a, 'e>, Children<'a, 'e>),
+}
+
+impl Compare<'_, '_> {
+	fn advance(self, pending: &mut Vec<Self>) -> Ordering {
+		let (left, right) = match self {
+			Self::Values(left, right) => (left, right),
+			Self::Children(mut left, mut right) => match (left.next(), right.next()) {
+				(Some(left_value), Some(right_value)) => {
+					pending.push(Self::Children(left, right));
+					(left_value, right_value)
+				}
+				(None, None) => return Ordering::Equal,
+				(None, Some(_)) => return Ordering::Less,
+				(Some(_), None) => return Ordering::Greater,
+			},
+		};
+		match (left, right) {
+			(Edn::Vector(left), Edn::Vector(right)) | (Edn::List(left), Edn::List(right)) => {
+				pending
+					.push(Self::Children(Children::Sequence(left.iter()), Children::Sequence(right.iter())));
+				Ordering::Equal
+			}
+			(Edn::Set(left), Edn::Set(right)) => {
+				pending.push(Self::Children(Children::Set(left.iter()), Children::Set(right.iter())));
+				Ordering::Equal
+			}
+			(Edn::Map(left), Edn::Map(right)) => {
+				pending.push(Self::Children(
+					Children::Map { entries: left.iter(), value: None },
+					Children::Map { entries: right.iter(), value: None },
+				));
+				Ordering::Equal
+			}
+			(Edn::Key(left), Edn::Key(right))
+			| (Edn::Symbol(left), Edn::Symbol(right))
+			| (Edn::Str(left), Edn::Str(right)) => left.cmp(right),
+			(Edn::Int(left), Edn::Int(right)) => left.cmp(right),
+			(Edn::Tagged(left_tag, left), Edn::Tagged(right_tag, right)) => {
+				pending.push(Compare::Values(left, right));
+				left_tag.cmp(right_tag)
+			}
+			#[cfg(feature = "floats")]
+			(Edn::Double(left), Edn::Double(right)) => left.cmp(right),
+			(Edn::Rational(left), Edn::Rational(right)) => left.cmp(right),
+			#[cfg(feature = "arbitrary-nums")]
+			(Edn::BigInt(left), Edn::BigInt(right)) => left.cmp(right),
+			#[cfg(feature = "arbitrary-nums")]
+			(Edn::BigDec(left), Edn::BigDec(right)) => left.cmp(right),
+			(Edn::Char(left), Edn::Char(right)) => left.cmp(right),
+			(Edn::Bool(left), Edn::Bool(right)) => left.cmp(right),
+			(Edn::Nil, Edn::Nil) => Ordering::Equal,
+			_ => left.order().cmp(&right.order()),
+		}
+	}
+}
+
+impl Ord for Edn<'_> {
+	fn cmp(&self, other: &Self) -> Ordering {
+		let mut pending = Vec::new();
+		let mut next = Compare::Values(self, other);
+		loop {
+			let order = next.advance(&mut pending);
+			if order != Ordering::Equal {
+				return order;
+			}
+			let Some(frame) = pending.pop() else { return Ordering::Equal };
+			next = frame;
+		}
+	}
+}
+
+impl PartialOrd for Edn<'_> {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl PartialEq for Edn<'_> {
+	fn eq(&self, other: &Self) -> bool {
+		self.cmp(other) == Ordering::Equal
+	}
+}
+
+impl Eq for Edn<'_> {}
+
+impl Edn<'_> {
+	fn take_children(&mut self, pending: &mut Vec<Self>) {
+		match self {
+			Self::Vector(values) | Self::List(values) => pending.append(values),
+			Self::Set(values) => pending.extend(mem::take(values)),
+			Self::Map(values) => {
+				for (key, value) in mem::take(values) {
+					pending.push(key);
+					pending.push(value);
+				}
+			}
+			Self::Tagged(_, child) if !matches!(child.as_ref(), Self::Nil) => {
+				pending.push(mem::replace(child.as_mut(), Self::Nil));
+			}
+			_ => {}
+		}
+	}
+}
+
+impl Drop for Edn<'_> {
+	fn drop(&mut self) {
+		let mut pending = Vec::new();
+		self.take_children(&mut pending);
+		while let Some(mut value) = pending.pop() {
+			value.take_children(&mut pending);
+		}
+	}
 }
 
 const SYMBOL_SPECIAL_CHARS: &str = ".*+!-_?$%&=<>:#";
@@ -106,7 +278,7 @@ impl<'e> TryFrom<parse::Node<'e>> for Edn<'e> {
 	/// [HMDK]: error::Code::HashMapDuplicateKey
 	/// [SDK]: error::Code::SetDuplicateKey
 	/// [IT]: error::Code::InvalidTag
-	fn try_from(parse::Node { kind: value, .. }: parse::Node<'e>) -> error::Result<Self> {
+	fn try_from(parse::Node { kind: value, span, .. }: parse::Node<'e>) -> error::Result<Self> {
 		use error::{Code, Error, Result};
 		use parse::NodeKind;
 
@@ -137,16 +309,16 @@ impl<'e> TryFrom<parse::Node<'e>> for Edn<'e> {
 			NodeKind::List(items, _) => {
 				Edn::List(items.into_iter().map(TryInto::try_into).collect::<Result<_>>()?)
 			}
-			NodeKind::Key(key) => Edn::Key(key),
-			NodeKind::Symbol(symbol) => Edn::Symbol(symbol),
-			NodeKind::Str(str) => Edn::Str(str),
+			NodeKind::Key(key) => Edn::Key(Cow::Borrowed(key)),
+			NodeKind::Symbol(symbol) => Edn::Symbol(Cow::Borrowed(symbol)),
+			NodeKind::Str(raw) => Edn::Str(decode_string(raw, span)?),
 			NodeKind::Int(int) => Edn::Int(int),
 			NodeKind::Tagged(tag, tag_span, node) => {
 				validate_tag(tag, tag_span)?;
 				if tag.starts_with(':') && !matches!(&node.kind, NodeKind::Map(..)) {
 					return Err(Error::from_position(Code::InvalidTag, tag_span.0));
 				}
-				Edn::Tagged(tag, Box::new((*node).try_into()?))
+				Edn::Tagged(Cow::Borrowed(tag), Box::new((*node).try_into()?))
 			}
 			#[cfg(feature = "floats")]
 			NodeKind::Double(double) => Edn::Double(double),
@@ -159,6 +331,146 @@ impl<'e> TryFrom<parse::Node<'e>> for Edn<'e> {
 			NodeKind::Bool(bool) => Edn::Bool(bool),
 			NodeKind::Nil => Edn::Nil,
 		})
+	}
+}
+
+impl<'e> Edn<'e> {
+	/// Creates a keyword from borrowed or owned text.
+	pub fn key(value: impl Into<Cow<'e, str>>) -> Self {
+		Self::Key(value.into())
+	}
+
+	/// Creates a symbol from borrowed or owned text.
+	pub fn symbol(value: impl Into<Cow<'e, str>>) -> Self {
+		Self::Symbol(value.into())
+	}
+
+	/// Creates a string from borrowed or owned text.
+	pub fn string(value: impl Into<Cow<'e, str>>) -> Self {
+		Self::Str(value.into())
+	}
+
+	/// Creates a tagged value from a borrowed or owned tag.
+	pub fn tagged(tag: impl Into<Cow<'e, str>>, value: Self) -> Self {
+		Self::Tagged(tag.into(), Box::new(value))
+	}
+}
+
+enum IntoOwnedFrame<'e> {
+	Value(Edn<'e>),
+	Finish { result_start: usize, kind: IntoOwnedKind },
+}
+
+enum IntoOwnedKind {
+	Vector,
+	Set,
+	Map,
+	List,
+	Tagged(String),
+}
+
+fn take_only_owned(mut values: Vec<Edn<'static>>, context: &str) -> Edn<'static> {
+	assert_eq!(values.len(), 1, "{context} conversion must produce exactly one value");
+	values.pop().expect("length was checked")
+}
+
+fn finish_into_owned(kind: IntoOwnedKind, values: Vec<Edn<'static>>) -> Edn<'static> {
+	match kind {
+		IntoOwnedKind::Vector => Edn::Vector(values),
+		IntoOwnedKind::Set => Edn::Set(values.into_iter().collect()),
+		IntoOwnedKind::Map => {
+			assert!(values.len().is_multiple_of(2), "map conversion must produce key-value pairs");
+			let mut values = values.into_iter();
+			let mut entries = BTreeMap::new();
+			while let Some(key) = values.next() {
+				let value = values.next().expect("value count was checked");
+				entries.insert(key, value);
+			}
+			Edn::Map(entries)
+		}
+		IntoOwnedKind::List => Edn::List(values),
+		IntoOwnedKind::Tagged(tag) => {
+			Edn::Tagged(Cow::Owned(tag), Box::new(take_only_owned(values, "tag")))
+		}
+	}
+}
+
+impl Edn<'_> {
+	/// Converts this value into one that owns all of its textual data.
+	///
+	/// Borrowed keys, symbols, strings, and tags are copied. Text that is already
+	/// owned is moved without being copied. Traversal uses an explicit stack, so
+	/// deeply nested values do not consume the call stack.
+	pub fn into_owned(self) -> Edn<'static> {
+		let mut frames = alloc::vec![IntoOwnedFrame::Value(self)];
+		let mut results = Vec::new();
+
+		while let Some(frame) = frames.pop() {
+			match frame {
+				IntoOwnedFrame::Value(mut value) => match &mut value {
+					Edn::Vector(values) => {
+						frames.push(IntoOwnedFrame::Finish {
+							result_start: results.len(),
+							kind: IntoOwnedKind::Vector,
+						});
+						frames.extend(mem::take(values).into_iter().rev().map(IntoOwnedFrame::Value));
+					}
+					Edn::Set(values) => {
+						frames.push(IntoOwnedFrame::Finish {
+							result_start: results.len(),
+							kind: IntoOwnedKind::Set,
+						});
+						frames.extend(mem::take(values).into_iter().rev().map(IntoOwnedFrame::Value));
+					}
+					Edn::Map(values) => {
+						frames.push(IntoOwnedFrame::Finish {
+							result_start: results.len(),
+							kind: IntoOwnedKind::Map,
+						});
+						for (key, value) in mem::take(values).into_iter().rev() {
+							frames.push(IntoOwnedFrame::Value(value));
+							frames.push(IntoOwnedFrame::Value(key));
+						}
+					}
+					Edn::List(values) => {
+						frames.push(IntoOwnedFrame::Finish {
+							result_start: results.len(),
+							kind: IntoOwnedKind::List,
+						});
+						frames.extend(mem::take(values).into_iter().rev().map(IntoOwnedFrame::Value));
+					}
+					Edn::Key(value) => results.push(Edn::Key(Cow::Owned(mem::take(value).into_owned()))),
+					Edn::Symbol(value) => {
+						results.push(Edn::Symbol(Cow::Owned(mem::take(value).into_owned())));
+					}
+					Edn::Str(value) => results.push(Edn::Str(Cow::Owned(mem::take(value).into_owned()))),
+					Edn::Int(value) => results.push(Edn::Int(*value)),
+					Edn::Tagged(tag, value) => {
+						frames.push(IntoOwnedFrame::Finish {
+							result_start: results.len(),
+							kind: IntoOwnedKind::Tagged(mem::take(tag).into_owned()),
+						});
+						frames.push(IntoOwnedFrame::Value(mem::replace(value.as_mut(), Edn::Nil)));
+					}
+					#[cfg(feature = "floats")]
+					Edn::Double(value) => results.push(Edn::Double(*value)),
+					Edn::Rational(value) => results.push(Edn::Rational(*value)),
+					#[cfg(feature = "arbitrary-nums")]
+					Edn::BigInt(value) => results.push(Edn::BigInt(mem::take(value))),
+					#[cfg(feature = "arbitrary-nums")]
+					Edn::BigDec(value) => results.push(Edn::BigDec(mem::take(value))),
+					Edn::Char(value) => results.push(Edn::Char(*value)),
+					Edn::Bool(value) => results.push(Edn::Bool(*value)),
+					Edn::Nil => results.push(Edn::Nil),
+				},
+				IntoOwnedFrame::Finish { result_start, kind } => {
+					let values = results.split_off(result_start);
+					results.push(finish_into_owned(kind, values));
+				}
+			}
+		}
+
+		take_only_owned(results, "root")
 	}
 }
 
@@ -180,7 +492,7 @@ pub fn read_string(edn: &str) -> Result<Edn<'_>, error::Error> {
 ///
 /// See [`crate::error::Error`].
 pub fn read(edn: &str) -> Result<(Edn<'_>, &str), error::Error> {
-	let (edn, remaining) = parse::parse_optional_edn(edn)?;
+	let (edn, remaining) = parse::parse_optional_edn(edn, 0)?;
 	let Some(edn) = edn else {
 		return Err(error::Error {
 			code: error::Code::UnexpectedEOF,
@@ -192,7 +504,7 @@ pub fn read(edn: &str) -> Result<(Edn<'_>, &str), error::Error> {
 	Ok((edn, remaining))
 }
 
-fn get_tag<'a>(tag: &'a str, key: &'a str) -> Option<&'a str> {
+fn get_tag<'a>(tag: &'a str, key: &str) -> Option<&'a str> {
 	// Break out early if there's no namespaces
 	if !key.contains('/') {
 		return None;
@@ -206,17 +518,8 @@ fn get_tag<'a>(tag: &'a str, key: &'a str) -> Option<&'a str> {
 	Some(tag)
 }
 
-fn check_key<'a>(tag: &'a str, key: &'a str) -> &'a str {
-	// check if the Key starts with the saved Tag
-	if key.starts_with(tag) {
-		let (_, key) = key.rsplit_once(tag).expect("Tag must exist, because it starts with it.");
-
-		// ensure there's a '/' and strip it
-		if let Some(k) = key.strip_prefix('/') {
-			return k;
-		}
-	}
-	key
+fn check_key<'a>(tag: &str, key: &'a str) -> &'a str {
+	key.strip_prefix(tag).and_then(|key| key.strip_prefix('/')).unwrap_or(key)
 }
 
 impl Edn<'_> {
@@ -226,7 +529,10 @@ impl Edn<'_> {
 		} else if let Edn::Tagged(tag, m) = self {
 			if let Edn::Key(key) = e {
 				let tag = get_tag(tag, key)?;
-				let key = check_key(tag, key);
+				let key = match key {
+					Cow::Borrowed(key) => Cow::Borrowed(check_key(tag, key)),
+					Cow::Owned(key) => Cow::Owned(String::from(check_key(tag, key))),
+				};
 
 				return m.get(&Edn::Key(key));
 			}
@@ -252,7 +558,10 @@ impl Edn<'_> {
 			Edn::Tagged(tag, m) => {
 				if let Edn::Key(key) = e {
 					let Some(tag) = get_tag(tag, key) else { return false };
-					let key = check_key(tag, key);
+					let key = match key {
+						Cow::Borrowed(key) => Cow::Borrowed(check_key(tag, key)),
+						Cow::Owned(key) => Cow::Owned(String::from(check_key(tag, key))),
+					};
 
 					return m.contains(&Edn::Key(key));
 				}
@@ -276,6 +585,67 @@ pub(crate) const fn char_to_edn(c: char) -> Option<&'static str> {
 		'\t' => Some("tab"),
 		_ => None,
 	}
+}
+
+/// Decodes the character following a `\` in a string escape sequence.
+///
+/// Returns `None` for unsupported escapes. This is the single source of truth for
+/// which escape sequences are valid; it is shared by the parser's escape validation
+/// and by `decode_string`, and is mirrored by `write_string`.
+pub(crate) const fn unescape_char(c: char) -> Option<char> {
+	match c {
+		't' => Some('\t'),
+		'r' => Some('\r'),
+		'n' => Some('\n'),
+		'\\' => Some('\\'),
+		'"' => Some('"'),
+		_ => None,
+	}
+}
+
+pub(crate) fn decode_string(raw: &str, span: parse::Span) -> error::Result<Cow<'_, str>> {
+	let Some(first_escape) = raw.find('\\') else {
+		return Ok(Cow::Borrowed(raw));
+	};
+
+	let mut decoded = String::with_capacity(raw.len());
+	decoded.push_str(&raw[..first_escape]);
+	let mut chars = raw[first_escape..].char_indices();
+	while let Some((offset, c)) = chars.next() {
+		if c != '\\' {
+			decoded.push(c);
+			continue;
+		}
+
+		let (offset, escaped) = chars.next().unwrap_or((offset, '\0'));
+		let Some(unescaped) = unescape_char(escaped) else {
+			let offset = first_escape + offset;
+			let relative = parse::Position::at(raw, offset);
+			let position = parse::Position {
+				line: span.0.line + relative.line - 1,
+				column: if relative.line == 1 { span.0.column + relative.column } else { relative.column },
+				ptr: span.0.ptr + 1 + offset,
+			};
+			return Err(error::Error::from_position(error::Code::InvalidEscape, position));
+		};
+		decoded.push(unescaped);
+	}
+	Ok(Cow::Owned(decoded))
+}
+
+pub(crate) fn write_string<W: fmt::Write>(writer: &mut W, value: &str) -> fmt::Result {
+	writer.write_char('"')?;
+	for c in value.chars() {
+		match c {
+			'\t' => writer.write_str("\\t")?,
+			'\r' => writer.write_str("\\r")?,
+			'\n' => writer.write_str("\\n")?,
+			'\\' => writer.write_str("\\\\")?,
+			'"' => writer.write_str("\\\"")?,
+			_ => writer.write_char(c)?,
+		}
+	}
+	writer.write_char('"')
 }
 
 fn write_indent(f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
@@ -323,7 +693,7 @@ impl Edn<'_> {
 				value.fmt_edn(f, pretty, depth)
 			}
 			Self::Key(k) => write!(f, ":{k}"),
-			Self::Str(s) => write!(f, "\"{s}\""),
+			Self::Str(s) => write_string(f, s),
 			Self::Int(i) => write!(f, "{i}"),
 			#[cfg(feature = "floats")]
 			Self::Double(d) => write!(f, "{d}"),
