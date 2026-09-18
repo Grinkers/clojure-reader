@@ -40,7 +40,7 @@ impl Serializer {
 			}
 			self.output.push('\n');
 			for _ in 0..self.compound_is_empty.len() {
-				self.output += "\t";
+				self.output += "  ";
 			}
 		} else if !is_first {
 			self.output += separator;
@@ -57,7 +57,7 @@ impl Serializer {
 		if pretty && !is_empty {
 			self.output.push('\n');
 			for _ in 0..self.compound_is_empty.len() {
-				self.output += "\t";
+				self.output += "  ";
 			}
 		}
 		self.output += closer;
@@ -88,7 +88,7 @@ where
 /// Serializes a value to an indented EDN `String`.
 ///
 /// Empty collections remain on one line and each item or map entry in a non-empty collection is
-/// indented by one tab per nesting level. Deeply nested subtrees fall back to compact formatting
+/// indented by two spaces per nesting level. Deeply nested subtrees fall back to compact formatting
 /// to bound indentation overhead.
 ///
 /// # Errors

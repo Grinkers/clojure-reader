@@ -650,7 +650,7 @@ pub(crate) fn write_string<W: fmt::Write>(writer: &mut W, value: &str) -> fmt::R
 
 fn write_indent(f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
 	for _ in 0..depth {
-		f.write_str("\t")?;
+		f.write_str("  ")?;
 	}
 	Ok(())
 }

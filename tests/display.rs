@@ -73,24 +73,24 @@ fn pretty() {
   )
   .unwrap();
 	let expected = r#"#app/config {
-	:empty [],
-	:items [
-		{
-			:name "Gato",
-			:roles #{
-				:admin
-				:user
-			}
-		}
-		{
-			:name "Nyanko",
-			:roles #{}
-		}
-	],
-	:pair (
-		1
-		2
-	)
+  :empty [],
+  :items [
+    {
+      :name "Gato",
+      :roles #{
+        :admin
+        :user
+      }
+    }
+    {
+      :name "Nyanko",
+      :roles #{}
+    }
+  ],
+  :pair (
+    1
+    2
+  )
 }"#;
 
 	let pretty = format!("{edn:#}");
@@ -109,11 +109,11 @@ fn nested_vectors(mut edn: Edn<'static>, depth: usize) -> Edn<'static> {
 fn pretty_falls_back_to_compact_formatting() {
 	let edn = nested_vectors(Edn::Int(0), 45);
 	let pretty = format!("{edn:#}");
-	let compact_line = format!("{}[[[0]]]", "\t".repeat(42));
+	let compact_line = format!("{}[[[0]]]", "  ".repeat(42));
 
 	assert!(pretty.lines().any(|line| line == compact_line));
 	assert_eq!(
-		pretty.lines().map(|line| line.chars().take_while(|c| *c == '\t').count()).max(),
+		pretty.lines().map(|line| line.chars().take_while(|c| *c == ' ').count() / 2).max(),
 		Some(42)
 	);
 	assert_eq!(edn::read_string(&pretty).unwrap(), edn);
@@ -124,7 +124,7 @@ fn pretty_falls_back_to_compact_formatting() {
 
 #[test]
 fn compact_fallback_preserves_collection_separators() {
-	let indent = "\t".repeat(42);
+	let indent = "  ".repeat(42);
 	let sequence = nested_vectors(Edn::Vector(vec![Edn::Int(1), Edn::Int(2)]), 42);
 	let map = nested_vectors(
 		Edn::Map(BTreeMap::from([

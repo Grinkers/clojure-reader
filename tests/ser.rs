@@ -40,24 +40,24 @@ mod test {
 			]),
 		};
 		let expected = r#"{
-	:name "Readers",
-	:people [
-		{
-			:name "caTEXAS",
-			:roles [
-				"admin"
-				"user"
-			]
-		}
-		{
-			:name "CAt",
-			:roles []
-		}
-	],
-	:metadata {
-		"region" "Chat Land",
-		"tier" "silly"
-	}
+  :name "Readers",
+  :people [
+    {
+      :name "caTEXAS",
+      :roles [
+        "admin"
+        "user"
+      ]
+    }
+    {
+      :name "CAt",
+      :roles []
+    }
+  ],
+  :metadata {
+    "region" "Chat Land",
+    "tier" "silly"
+  }
 }"#;
 
 		let pretty = to_string_pretty(&team).unwrap();
@@ -84,11 +84,11 @@ mod test {
 	#[test]
 	fn pretty_falls_back_to_compact_formatting() {
 		let pretty = to_string_pretty(&nested_sequences(Nested::Scalar(0), 45)).unwrap();
-		let compact_line = alloc::format!("{}[[[0]]]", "\t".repeat(42));
+		let compact_line = alloc::format!("{}[[[0]]]", "  ".repeat(42));
 
 		assert!(pretty.lines().any(|line| line == compact_line));
 		assert_eq!(
-			pretty.lines().map(|line| line.chars().take_while(|c| *c == '\t').count()).max(),
+			pretty.lines().map(|line| line.chars().take_while(|c| *c == ' ').count() / 2).max(),
 			Some(42)
 		);
 		assert!(clojure_reader::edn::read_string(&pretty).is_ok());
@@ -100,7 +100,7 @@ mod test {
 
 	#[test]
 	fn compact_fallback_preserves_collection_separators() {
-		let indent = "\t".repeat(42);
+		let indent = "  ".repeat(42);
 		let sequence =
 			nested_sequences(Nested::Sequence(vec![Nested::Scalar(1), Nested::Scalar(2)]), 42);
 		let map = nested_sequences(
