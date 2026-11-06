@@ -146,7 +146,7 @@ mod test {
 	fn errors() {
 		let edn_str = r"cat in your nums";
 		let res = from_str::<u8>(edn_str);
-		let expected = r#"Err(EdnError { code: Serde("cannot convert Symbol(\"cat\") to i64"), line: None, column: None, ptr: None })"#;
+		let expected = r#"Err(EdnError { code: Serde("invalid type: symbol, expected i64"), line: None, column: None, ptr: None })"#;
 		assert!(res.is_err());
 		assert_eq!(format!("{res:?}"), expected);
 
@@ -457,7 +457,7 @@ mod test {
 		);
 		assert_eq!(
 			format!("{:?}", from_str::<E>(r#""#)),
-			"Err(EdnError { code: Serde(\"can't convert Nil into Tagged for enum\"), line: None, column: None, ptr: None })"
+			"Err(EdnError { code: Serde(\"invalid type: unit value, expected enum E\"), line: None, column: None, ptr: None })"
 		);
 		assert_eq!(
 			format!("{:?}", from_str::<E>(r#"#BUnit sillycat"#)),
@@ -496,7 +496,7 @@ mod test {
 	fn serde_errors() {
 		assert_eq!(
 			format!("{:?}", from_str::<String>(r#"#E/Tuple [4/2]"#)),
-			"Err(EdnError { code: Serde(\"Don't know how to convert Tagged(\\\"E/Tuple\\\", Vector([Rational((4, 2))])) into any\"), line: None, column: None, ptr: None })"
+			"Err(EdnError { code: Serde(\"invalid type: tagged value, expected a string\"), line: None, column: None, ptr: None })"
 		);
 
 		#[derive(Deserialize, PartialEq, Debug)]
@@ -505,7 +505,7 @@ mod test {
 		}
 		assert_eq!(
 			format!("{:?}", from_str::<SomeBytes<'_>>(r#"[4/2]"#)),
-			"Err(EdnError { code: Serde(\"can't convert Rational((4, 2)) into bytes\"), line: None, column: None, ptr: None })"
+			"Err(EdnError { code: Serde(\"invalid type: rational, expected bytes\"), line: None, column: None, ptr: None })"
 		);
 	}
 

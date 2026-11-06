@@ -10,7 +10,8 @@ use crate::edn::Edn;
 use crate::parse;
 
 use serde::de::{
-	self, DeserializeSeed, EnumAccess, IntoDeserializer, MapAccess, SeqAccess, VariantAccess, Visitor,
+	self, DeserializeSeed, EnumAccess, IntoDeserializer, MapAccess, SeqAccess, Unexpected,
+	VariantAccess, Visitor,
 };
 use serde::{Deserialize, forward_to_deserialize_any};
 
@@ -43,11 +44,33 @@ impl de::Error for Error {
 	}
 }
 
+fn unexpected<'a>(edn: &'a Edn<'_>) -> Unexpected<'a> {
+	match edn {
+		Edn::Vector(_) | Edn::List(_) | Edn::Set(_) => Unexpected::Seq,
+		Edn::Map(_) => Unexpected::Map,
+		Edn::Key(_) => Unexpected::Other("keyword"),
+		Edn::Symbol(_) => Unexpected::Other("symbol"),
+		Edn::Str(s) => Unexpected::Str(s),
+		Edn::Int(i) => Unexpected::Signed(*i),
+		Edn::Tagged(..) => Unexpected::Other("tagged value"),
+		#[cfg(feature = "floats")]
+		Edn::Double(d) => Unexpected::Float(**d),
+		Edn::Rational(_) => Unexpected::Other("rational"),
+		#[cfg(feature = "arbitrary-nums")]
+		Edn::BigInt(_) => Unexpected::Other("bigint"),
+		#[cfg(feature = "arbitrary-nums")]
+		Edn::BigDec(_) => Unexpected::Other("bigdec"),
+		Edn::Char(c) => Unexpected::Char(*c),
+		Edn::Bool(b) => Unexpected::Bool(*b),
+		Edn::Nil => Unexpected::Unit,
+	}
+}
+
 fn get_int_from_edn(edn: &Edn<'_>) -> Result<i64> {
 	if let Edn::Int(i) = edn {
 		return Ok(*i);
 	}
-	Err(de::Error::custom(format!("cannot convert {edn:?} to i64")))
+	Err(de::Error::invalid_type(unexpected(edn), &"i64"))
 }
 
 fn get_bytes_from_edn(edn: &Edn<'_>) -> Result<Vec<u8>> {
@@ -59,7 +82,7 @@ fn get_bytes_from_edn(edn: &Edn<'_>) -> Result<Vec<u8>> {
 				u8::try_from(int).map_err(|_| de::Error::custom(format!("can't convert {int} into u8")))
 			})
 			.collect(),
-		_ => Err(de::Error::custom(format!("can't convert {edn:?} into bytes"))),
+		_ => Err(de::Error::invalid_type(unexpected(edn), &"bytes")),
 	}
 }
 
@@ -94,7 +117,7 @@ impl<'de, 'edn: 'de> de::Deserializer<'de> for Edn<'edn> {
 				Ok(visitor.visit_seq(SeqEdn::new(s))?)
 			}
 			// Things like rational numbers and custom tags can't be represented in rust types
-			_ => Err(de::Error::custom(format!("Don't know how to convert {self:?} into any"))),
+			_ => Err(de::Error::invalid_type(unexpected(&self), &visitor)),
 		}
 	}
 
@@ -199,13 +222,12 @@ impl<'de, 'edn: 'de> de::Deserializer<'de> for Edn<'edn> {
 	where
 		V: Visitor<'de>,
 	{
-		let _ = visitor; // hush clippy
 		#[cfg(feature = "floats")]
 		if let Edn::Double(f) = self {
 			#[expect(clippy::cast_possible_truncation)]
 			return visitor.visit_f32(*f as f32);
 		}
-		Err(de::Error::custom(format!("can't convert {self:?} into f32")))
+		Err(de::Error::invalid_type(unexpected(&self), &visitor))
 	}
 
 	fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
@@ -254,7 +276,7 @@ impl<'de, 'edn: 'de> de::Deserializer<'de> for Edn<'edn> {
 		match self {
 			Edn::Nil => visitor.visit_unit(),
 			Edn::Map(ref map) if map.is_empty() => visitor.visit_unit(),
-			other => Err(de::Error::custom(format!("can't convert {other:?} into unit"))),
+			other => Err(de::Error::invalid_type(unexpected(&other), &visitor)),
 		}
 	}
 
@@ -301,7 +323,7 @@ impl<'de, 'edn: 'de> de::Deserializer<'de> for Edn<'edn> {
 		V: Visitor<'de>,
 	{
 		let Edn::Tagged(tag, edn) = &mut self else {
-			return Err(de::Error::custom(format!("can't convert {self:?} into Tagged for enum")));
+			return Err(de::Error::invalid_type(unexpected(&self), &visitor));
 		};
 
 		let variant = match tag {
@@ -355,6 +377,9 @@ impl<'de, 'edn: 'de> de::Deserializer<'de> for Edn<'edn> {
 			Edn::Key(Cow::Owned(value))
 			| Edn::Symbol(Cow::Owned(value))
 			| Edn::Str(Cow::Owned(value)) => visitor.visit_string(mem::take(value)),
+			Edn::Vector(_) | Edn::List(_) | Edn::Set(_) | Edn::Map(_) | Edn::Tagged(..) => {
+				Err(de::Error::invalid_type(unexpected(&self), &visitor))
+			}
 			other => visitor.visit_string(other.to_string()),
 		}
 	}

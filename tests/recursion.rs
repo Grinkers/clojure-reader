@@ -37,6 +37,27 @@ fn deep_trailing_discard_is_ignored_without_overflowing_the_stack() {
 	assert_eq!(value, 42);
 }
 
+#[cfg(feature = "serde")]
+#[test]
+fn deep_type_error_is_reported_without_overflowing_the_stack() {
+	let input = format!("{}0{}", "[".repeat(20_000), "]".repeat(20_000));
+	let error = small_stack(move || clojure_reader::from_str::<i32>(&input).unwrap_err());
+	drop(error);
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn deep_struct_key_is_rejected_without_overflowing_the_stack() {
+	#[derive(Debug, serde_derive::Deserialize)]
+	struct Fields {
+		_a: i32,
+	}
+
+	let input = format!("{{{}0{} 1}}", "[".repeat(20_000), "]".repeat(20_000));
+	let error = small_stack(move || clojure_reader::from_str::<Fields>(&input).unwrap_err());
+	drop(error);
+}
+
 #[test]
 fn into_owned_set_rebuild_does_not_recurse_through_keys() {
 	let input = thread::Builder::new()
