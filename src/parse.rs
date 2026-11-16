@@ -309,22 +309,28 @@ impl<'e> SourceReader<'e> {
 	fn slurp_str(&mut self) -> Result<&'e str, Error> {
 		let _ = self.nibble_next(); // Consume the leading '"' char
 		let starting_ptr = self.read_pos.ptr;
-		let mut escape = false;
 		loop {
-			let position = self.read_pos;
-			if let Some(c) = self.nibble_next() {
-				if escape {
-					if crate::edn::unescape_char(c).is_none() {
-						return Err(Error::from_position(Code::InvalidEscape, position));
+			match self.nibble_next() {
+				Some('"') => return Ok(&self.slice[starting_ptr..self.read_pos.ptr - 1]),
+				Some('\\') => {
+					let escaped = &self.slice[self.read_pos.ptr..];
+					if let Some((_, len)) = crate::edn::unescape(escaped) {
+						for _ in 0..len {
+							let _ = self.nibble_next();
+						}
+						continue;
 					}
-					escape = false;
-				} else if c == '"' {
-					return Ok(&self.slice[starting_ptr..self.read_pos.ptr - 1]);
-				} else {
-					escape = c == '\\';
+					let truncated_unicode = escaped.starts_with('u')
+						&& escaped.len() < "uD800\\uDC00".len()
+						&& !escaped.contains('"');
+					if escaped.is_empty() || truncated_unicode {
+						while self.nibble_next().is_some() {}
+						return Err(Error::from_position(Code::UnexpectedEOF, self.read_pos));
+					}
+					return Err(Error::from_position(Code::InvalidEscape, self.read_pos));
 				}
-			} else {
-				return Err(Error::from_position(Code::UnexpectedEOF, self.read_pos));
+				Some(_) => {}
+				None => return Err(Error::from_position(Code::UnexpectedEOF, self.read_pos)),
 			}
 		}
 	}
@@ -1245,14 +1251,19 @@ fn edn_literal(literal: &str) -> Result<Atom<'_>, Code> {
 #[inline]
 fn parse_char(lit: &str) -> Result<char, Code> {
 	let lit = &lit[1..]; // ignore the leading '\\'
-	match lit {
-		"newline" => Ok('\n'),
-		"return" => Ok('\r'),
-		"tab" => Ok('\t'),
-		"space" => Ok(' '),
-		c if c.chars().count() == 1 => Ok(c.chars().next().expect("c must be one character")),
-		_ => Err(Code::InvalidChar),
-	}
+	let mut chars = lit.chars();
+	let parsed = match lit {
+		"newline" => Some('\n'),
+		"return" => Some('\r'),
+		"tab" => Some('\t'),
+		"space" => Some(' '),
+		_ => match (chars.next(), chars.as_str()) {
+			(Some(c), "") => Some(c),
+			(Some('u'), hex) => crate::edn::parse_hex4(hex).and_then(|v| char::from_u32(v.into())),
+			_ => None,
+		},
+	};
+	parsed.ok_or(Code::InvalidChar)
 }
 
 #[inline]

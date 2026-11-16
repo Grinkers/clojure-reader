@@ -41,6 +41,12 @@ fn strings_are_escaped() {
 }
 
 #[test]
+fn unicode_escapes_display_decoded() {
+	display_diff!(r#"{:note "café"}"#, r#"{:note "caf\u00e9"}"#);
+	display_diff!("\\é", r#"\u00e9"#);
+}
+
+#[test]
 fn empty_string_display() {
 	display!("\"\"");
 	assert_eq!(format!("{}", Edn::Str("".into())), "\"\"");
