@@ -8,7 +8,8 @@
 //!    will convert the Node into an Edn
 //!
 //! ## Differences from Clojure
-//! -  String escape support is limited to `\\t`, `\\r`, `\\n`, `\\\\`, and `\\"`.
+//! -  String escape support is limited to `\t`, `\r`, `\n`, `\\`, `\"`, and `\uNNNN`.
+//! -  Unpaired UTF-16 surrogate escapes (e.g. `"\uD83D"`) are rejected; a Rust `str` cannot hold them.
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -587,39 +588,50 @@ pub(crate) const fn char_to_edn(c: char) -> Option<&'static str> {
 	}
 }
 
-/// Decodes the character following a `\` in a string escape sequence.
+/// Decodes the escape sequence following a `\` in a string.
 ///
-/// Returns `None` for unsupported escapes. This is the single source of truth for
-/// which escape sequences are valid; it is shared by the parser's escape validation
-/// and by `decode_string`, and is mirrored by `write_string`.
-pub(crate) const fn unescape_char(c: char) -> Option<char> {
-	match c {
-		't' => Some('\t'),
-		'r' => Some('\r'),
-		'n' => Some('\n'),
-		'\\' => Some('\\'),
-		'"' => Some('"'),
-		_ => None,
+/// Returns the decoded character and the escape's length in bytes, or `None`.
+/// Escapes are ASCII, so the byte length is also the character count.
+/// This is the single source of truth for escape sequences:
+/// it is shared by the parser's escape validation and by `decode_string`.
+pub(crate) fn unescape(escaped: &str) -> Option<(char, usize)> {
+	let decoded = match escaped.chars().next()? {
+		't' => '\t',
+		'r' => '\r',
+		'n' => '\n',
+		'\\' => '\\',
+		'"' => '"',
+		'u' => {
+			let high = parse_hex4(escaped.get(1..5)?)?;
+			if let Some(c) = char::from_u32(high.into()) {
+				return Some((c, 5));
+			}
+			let low = parse_hex4(escaped.get(5..11)?.strip_prefix("\\u")?)?;
+			return char::decode_utf16([high, low]).next()?.ok().map(|c| (c, 11));
+		}
+		_ => return None,
+	};
+	Some((decoded, 1))
+}
+
+pub(crate) fn parse_hex4(digits: &str) -> Option<u16> {
+	if digits.len() != 4 || !digits.bytes().all(|b| b.is_ascii_hexdigit()) {
+		return None;
 	}
+	u16::from_str_radix(digits, 16).ok()
 }
 
 pub(crate) fn decode_string(raw: &str, span: parse::Span) -> error::Result<Cow<'_, str>> {
-	let Some(first_escape) = raw.find('\\') else {
+	if !raw.contains('\\') {
 		return Ok(Cow::Borrowed(raw));
-	};
+	}
 
 	let mut decoded = String::with_capacity(raw.len());
-	decoded.push_str(&raw[..first_escape]);
-	let mut chars = raw[first_escape..].char_indices();
-	while let Some((offset, c)) = chars.next() {
-		if c != '\\' {
-			decoded.push(c);
-			continue;
-		}
-
-		let (offset, escaped) = chars.next().unwrap_or((offset, '\0'));
-		let Some(unescaped) = unescape_char(escaped) else {
-			let offset = first_escape + offset;
+	let mut rest = raw;
+	while let Some((before, escaped)) = rest.split_once('\\') {
+		decoded.push_str(before);
+		let Some((unescaped, len)) = unescape(escaped) else {
+			let offset = raw.len() - escaped.len();
 			let relative = parse::Position::at(raw, offset);
 			let position = parse::Position {
 				line: span.0.line + relative.line - 1,
@@ -629,7 +641,9 @@ pub(crate) fn decode_string(raw: &str, span: parse::Span) -> error::Result<Cow<'
 			return Err(error::Error::from_position(error::Code::InvalidEscape, position));
 		};
 		decoded.push(unescaped);
+		rest = escaped.get(len..).unwrap_or_default();
 	}
+	decoded.push_str(rest);
 	Ok(Cow::Owned(decoded))
 }
 

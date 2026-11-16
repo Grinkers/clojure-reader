@@ -176,9 +176,15 @@ fn strings_without_escapes_borrow() {
 fn strings_each_escape_decodes() {
 	use alloc::borrow::Cow;
 
-	// Every supported escape decodes to its control character and forces an owned Cow.
-	let cases =
-		[(r#""\t""#, "\t"), (r#""\r""#, "\r"), (r#""\n""#, "\n"), (r#""\\""#, "\\"), (r#""\"""#, "\"")];
+	// Every supported escape kind decodes and forces an owned Cow.
+	let cases = [
+		(r#""\t""#, "\t"),
+		(r#""\r""#, "\r"),
+		(r#""\n""#, "\n"),
+		(r#""\\""#, "\\"),
+		(r#""\"""#, "\""),
+		(r#""\u00E9""#, "é"),
+	];
 	for (input, expected) in cases {
 		let edn = edn::read_string(input).unwrap();
 		assert_eq!(edn, Edn::Str(expected.into()), "decoding {input}");
@@ -209,15 +215,59 @@ fn strings_owned_and_borrowed_compare_equal() {
 fn strings_invalid_escapes_are_rejected() {
 	use clojure_reader::error::Code;
 
-	// Unsupported escape sequences (including \b and \f which Clojure allows but this
-	// crate does not, and \uNNNN unicode escapes) must error rather than silently pass.
-	for input in [r#""\x""#, r#""\f""#, r#""\b""#, r#""\0""#, r#""\u0041""#, "\"\\猫\""] {
+	// Unsupported or malformed escape sequences must error rather than silently pass.
+	for input in [
+		r#""\x""#,
+		r#""\b""#,
+		r#""\f""#,
+		r#""\101""#,
+		r#""\U00e9""#,
+		"\"\\猫\"",
+		r#""\u00e""#,
+		r#""\u00g9""#,
+		r#""\u+0e9""#,
+		// Clojure accepts unpaired UTF-16 surrogates; a Rust `str` cannot hold them.
+		r#""\uD83D""#,
+		r#""\uD83D\u0041""#,
+	] {
 		let err = edn::read_string(input).unwrap_err();
 		assert_eq!(err.code, Code::InvalidEscape, "{input} should be InvalidEscape");
 	}
 
 	// A trailing lone backslash (escape with nothing after it) hits EOF.
 	assert_eq!(edn::read_string("\"abc\\").unwrap_err().code, Code::UnexpectedEOF);
+	// So does a `\u` escape that more input could still complete.
+	assert_eq!(edn::read_string("\"\\uD83D").unwrap_err().code, Code::UnexpectedEOF);
+}
+
+#[test]
+fn issue_23_unicode_escape_in_map() {
+	assert_eq!(
+		edn::read_string(r#"{:note "caf\u00e9"}"#).unwrap(),
+		Edn::Map(BTreeMap::from([(Edn::Key("note".into()), Edn::Str("café".into()))]))
+	);
+}
+
+#[test]
+fn strings_unicode_escape_boundaries() {
+	let cases = [(r#""\u00e93""#, "é3"), (r#""\\u00e9""#, "\\u00e9"), (r#""\uD83D\uDE00""#, "😀")];
+	for (input, expected) in cases {
+		assert_eq!(edn::read_string(input).unwrap(), Edn::Str(expected.into()), "decoding {input}");
+	}
+}
+
+#[test]
+fn chars_unicode_escapes() {
+	use clojure_reader::error::Code;
+
+	let cases = [("\\u00e9", 'é'), ("\\u", 'u')];
+	for (input, expected) in cases {
+		assert_eq!(edn::read_string(input).unwrap(), Edn::Char(expected), "reading {input}");
+	}
+
+	for input in ["\\uD83D", "\\u00e9x", "\\o101", "\\backspace"] {
+		assert_eq!(edn::read_string(input).unwrap_err().code, Code::InvalidChar, "{input}");
+	}
 }
 
 #[test]

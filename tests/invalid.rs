@@ -11,11 +11,8 @@ fn invalid_edn() {
 	assert!(edn::read_string("#_").is_err());
 	assert!(edn::read_string(r#""\foo""#).is_err());
 	assert!(edn::read_string(r#""foo"#).is_err());
-	// Unsupported escape sequences.
+	// Unsupported or malformed escape sequences.
 	assert!(edn::read_string(r#""\x""#).is_err());
-	assert!(edn::read_string(r#""\b""#).is_err());
-	assert!(edn::read_string(r#""\f""#).is_err());
-	assert!(edn::read_string(r#""\u0041""#).is_err());
 	// A backslash immediately before the closing quote escapes the quote, leaving
 	// the string unterminated.
 	assert!(edn::read_string(r#""abc\""#).is_err());
