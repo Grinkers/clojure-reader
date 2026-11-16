@@ -7,11 +7,13 @@
   clean     {:doc     "Removes all target directories"
              :depends [clean-rs clean-clj]}
   build-rs  {:doc  "Builds the libclojure-reader.so and copies it to resources"
-             :task (do (shell {:dir "libclojure-reader"} "cargo build --release")
+             :task (do (shell {:dir "libclojure-reader"} "cargo build --release --target-dir target")
                        (when-not (fs/directory? "resources") (fs/create-dir "resources"))
                        (fs/copy "libclojure-reader/target/release/libclojure_reader.so" "resources" {:replace-existing true}))}
   run-dev   {:doc     "Rebuilds libclojure-reader, then runs the fuzzer with lein."
              :depends [build-rs]
              :task    (shell "lein run")}
-  libfuzz   {:doc  "Runs the libfuzzer-sys fuzzer"
-             :task (shell "cargo fuzz r fuzz_target_1 -- -runs=42090420")}}}
+  libfuzz   {:doc  "Runs the libfuzzer-sys fuzzer on all cores"
+             :task (shell "cargo fuzz run -s none --no-trace-compares fuzz_target_1 --"
+                          "-runs=420904200"
+                          (str "-fork=" (.availableProcessors (Runtime/getRuntime))))}}}

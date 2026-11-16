@@ -66,6 +66,13 @@ mod test {
 			"#foo|bar nil",
 			"#foo@bar nil",
 			"#:foo 1",
+			// Nested invalid nodes propagate out of every container.
+			"[#4 2]",
+			"(#4 2)",
+			"#{#4 2}",
+			"{#4 2 :a}",
+			"{:a #4 2}",
+			"#foo/bar #4 2",
 		] {
 			let node = parse::parse(&mut SourceReader::new(input)).unwrap();
 			assert_eq!(Edn::try_from(node).unwrap_err().code, Code::InvalidTag);
@@ -148,5 +155,16 @@ mod test {
 		assert_eq!(error.line, Some(4));
 		assert_eq!(error.column, Some(13));
 		assert_eq!(error.ptr, Some(23));
+
+		let node = Node::no_discards(
+			NodeKind::Str("a\n\\x"),
+			Span(Position { line: 4, column: 10, ptr: 20 }, Position { line: 5, column: 4, ptr: 26 }),
+		);
+		let error = Edn::try_from(node).unwrap_err();
+
+		assert_eq!(error.code, Code::InvalidEscape);
+		assert_eq!(error.line, Some(5));
+		assert_eq!(error.column, Some(2));
+		assert_eq!(error.ptr, Some(24));
 	}
 }

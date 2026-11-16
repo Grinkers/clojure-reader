@@ -1,14 +1,25 @@
-# fuzzer
+# fuzzing
 
-A Clojure program to fuzz clojure-reader.
+## Clojure (differential)
 
-## Usage
+Generates EDN with Clojure's test generators, then round trips it through clojure-reader and
+compares the result against `clojure.edn/read-string`.
 
 ```bash
-bb run-dev
+bb run-dev       # rebuild the JNI library, then 4209042 iterations
+lein run 100000  # custom iteration count, after `bb build-rs`
 ```
 
-See [bb.edn](bb.edn) for details
+## libfuzzer-sys (crashes)
+
+```bash
+bb libfuzz
+```
+
+Feeds UTF-8 into `edn::read_string`, looking for crashes.
+Requires [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz).
+
+Failing inputs are written to `artifacts/fuzz_target_1/`.
 
 ## TODO
 
@@ -16,18 +27,9 @@ Fuzz non-ednable.
 
 Non-linux.
 
-Makefile or babashka tasks.
-
 ## License
 
 See latest Clojure license for
-[generators.clj](/src/clojure/test_clojure/generators.clj)
+[generators.clj](src/clojure/test_clojure/generators.clj)
 
 For everything else in this repo see [../LICENSE](../LICENSE)
-
-# libfuzzer-sys
-
-## usage
-```bash
-bb run-fuzz
-```

@@ -135,11 +135,46 @@ fn into_owned_moves_existing_strings() {
 }
 
 #[test]
+fn into_owned_keeps_non_text_values() {
+	let floats = ["1.5"].into_iter().filter(|_| cfg!(feature = "floats"));
+	let big_nums = ["[1N 1M]"].into_iter().filter(|_| cfg!(feature = "arbitrary-nums"));
+
+	for source in [r"[1/2 \c true]"].into_iter().chain(floats).chain(big_nums) {
+		let value = edn::read_string(source).unwrap();
+		assert_eq!(value.clone().into_owned(), value, "{source}");
+	}
+}
+
+#[test]
+fn ordering_is_consistent_across_kinds() {
+	let sources = [
+		"[1]", "[1 2]", "#{}", "{}", "()", ":k", "s", r#""s""#, "1", "#t x", "1/2", r"\c", "true",
+		"nil",
+	];
+	let floats = ["1.5"].into_iter().filter(|_| cfg!(feature = "floats"));
+	let big_nums = ["1N", "1M"].into_iter().filter(|_| cfg!(feature = "arbitrary-nums"));
+
+	let values: Vec<Edn<'_>> = sources
+		.into_iter()
+		.chain(floats)
+		.chain(big_nums)
+		.map(|s| edn::read_string(s).unwrap())
+		.collect();
+	for (i, left) in values.iter().enumerate() {
+		for (j, right) in values.iter().enumerate() {
+			assert_eq!(left.cmp(right), right.cmp(left).reverse(), "{left} vs {right}");
+			assert_eq!(left == right, i == j, "{left} vs {right}");
+		}
+	}
+}
+
+#[test]
 fn read_nil_and_eof() {
 	assert_eq!(edn::read("nil").unwrap(), (Edn::Nil, ""));
 	assert_eq!(edn::read("#_42 nil").unwrap(), (Edn::Nil, ""));
 	assert!(edn::read("").is_err());
 	assert!(edn::read("#_42").is_err());
+	assert!(edn::read("]").is_err());
 }
 
 #[test]
@@ -226,9 +261,14 @@ fn strings_invalid_escapes_are_rejected() {
 		r#""\u00e""#,
 		r#""\u00g9""#,
 		r#""\u+0e9""#,
+		r#""\u0""#,
+		// The 4-byte hex window ends inside a multi-byte char.
+		"\"\\u000é\"",
 		// Clojure accepts unpaired UTF-16 surrogates; a Rust `str` cannot hold them.
 		r#""\uD83D""#,
 		r#""\uD83D\u0041""#,
+		r#""\uD83Dxxxxxx""#,
+		r#""\uD83D\uZZZZ""#,
 	] {
 		let err = edn::read_string(input).unwrap_err();
 		assert_eq!(err.code, Code::InvalidEscape, "{input} should be InvalidEscape");

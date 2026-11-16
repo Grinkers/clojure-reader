@@ -30,6 +30,7 @@ mod test {
 		assert_eq!("a\nb\tc\r\\\"", from_str::<String>(r#""a\nb\tc\r\\\"""#).unwrap());
 		assert!(from_str::<&str>(r#""a\nb""#).is_err());
 		assert_eq!("lol 猫s", from_str::<&str>(r#""lol 猫s""#).unwrap());
+		assert_eq!("sym", from_str::<&str>("sym").unwrap());
 		assert_eq!(false, from_str("false").unwrap());
 	}
 
@@ -78,6 +79,10 @@ mod test {
 		let borrowed: Result<&str, _> =
 			DeserializeTrait::deserialize(Edn::Key(Cow::Owned(String::from("key"))));
 		assert!(borrowed.is_err());
+
+		let string: String =
+			DeserializeTrait::deserialize(Edn::string(String::from("string"))).unwrap();
+		assert_eq!(string, "string");
 	}
 
 	#[test]
@@ -152,6 +157,36 @@ mod test {
 
 		let res = from_str::<f32>(edn_str);
 		assert!(res.is_err());
+
+		assert!(from_str::<i8>(edn_str).is_err());
+		assert!(from_str::<i16>(edn_str).is_err());
+		assert!(from_str::<u16>(edn_str).is_err());
+		assert!(from_str::<u32>(edn_str).is_err());
+		assert!(from_str::<u64>(edn_str).is_err());
+		assert!(from_str::<bool>("nil").is_err());
+	}
+
+	#[test]
+	fn type_errors_name_the_edn_kind() {
+		let cases = [
+			("{:a 1}", "map"),
+			(":a", "keyword"),
+			(r#""s""#, r#"string "s""#),
+			("1", "integer `1`"),
+			(r"\c", "character `c`"),
+			("true", "boolean `true`"),
+		];
+		let floats = [("1.5", "floating point `1.5`")].into_iter().filter(|_| cfg!(feature = "floats"));
+		let big_nums =
+			[("1N", "bigint"), ("1M", "bigdec")].into_iter().filter(|_| cfg!(feature = "arbitrary-nums"));
+
+		for (input, kind) in cases.into_iter().chain(floats).chain(big_nums) {
+			assert_eq!(
+				from_str::<()>(input).unwrap_err().code,
+				Code::Serde(format!("invalid type: {kind}, expected unit")),
+				"{input}"
+			);
+		}
 	}
 
 	#[test]
@@ -258,6 +293,14 @@ mod test {
 			format!("{:?}", from_str::<Vec<u8>>("[256]")),
 			"Err(EdnError { code: Serde(\"can't convert 256 into u8\"), line: None, column: None, ptr: None })"
 		);
+		assert_eq!(
+			from_str::<Bytes>("[256]").unwrap_err().code,
+			Code::Serde("can't convert 256 into u8".to_owned())
+		);
+		assert_eq!(
+			from_str::<Bytes>("[:a]").unwrap_err().code,
+			Code::Serde("invalid type: keyword, expected i64".to_owned())
+		);
 	}
 
 	#[test]
@@ -290,6 +333,7 @@ mod test {
 		let expected: Vec<u16> = vec![1, 3, 4, 42];
 		let res = from_str::<Vec<u16>>("#{1 4 42 3}");
 		assert_eq!(expected, res.unwrap());
+		assert!(from_str::<Vec<u16>>("#{:a}").is_err());
 	}
 
 	#[test]
@@ -360,6 +404,12 @@ mod test {
 
 		assert_eq!(Test { int: 42, c: 'c' }, from_str(r#"{"int" 42 :c \c}"#).unwrap());
 		assert_eq!(Test { int: 42, c: 'n' }, from_str(r#"{:int 42 "c" \n}"#).unwrap());
+		assert_eq!(Test { int: 42, c: 's' }, from_str(r"{int 42 c \s}").unwrap());
+
+		for source in [r"{:int 42 :c \d}", r"{int 42 c \d}", r#"{"int" 42 "c" \d}"#] {
+			let owned = clojure_reader::edn::read_string(source).unwrap().into_owned();
+			assert_eq!(Test { int: 42, c: 'd' }, Test::deserialize(owned).unwrap(), "{source}");
+		}
 	}
 
 	#[test]
@@ -448,8 +498,11 @@ mod test {
 			DeserializeTrait::deserialize(value.clone()).unwrap()
 		}
 
-		let malformed = Edn::tagged(String::from("E/Unit/extra"), Edn::Nil);
-		assert!(E::deserialize(malformed).is_err());
+		for tag in ["E/Unit/extra", "EUnit", "B/Unit", "E/Missing"] {
+			let borrowed = E::deserialize(Edn::tagged(tag, Edn::Nil)).unwrap_err().code;
+			let owned = E::deserialize(Edn::tagged(String::from(tag), Edn::Nil)).unwrap_err().code;
+			assert_eq!(borrowed, owned, "{tag}");
+		}
 
 		assert_eq!(
 			format!("{:?}", from_str::<E>(r#"#B/Unit sillycat"#)),

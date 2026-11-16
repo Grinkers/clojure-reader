@@ -223,6 +223,14 @@ fn bare_cr_advances_line_in_invalid_escape() {
 }
 
 #[test]
+fn crlf_advances_line_once_after_a_comment() {
+	assert_eq!(
+		err_as_string("; comment\r\n]"),
+		"EdnError { code: UnmatchedDelimiter(']'), line: Some(2), column: Some(1), ptr: Some(11) }"
+	);
+}
+
+#[test]
 fn bare_cr_advances_line_after_a_comment() {
 	assert_eq!(
 		err_as_string("; comment\r]"),

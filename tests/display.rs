@@ -73,6 +73,29 @@ fn raw_control_char_round_trips() {
 }
 
 #[test]
+fn writer_errors_propagate() {
+	use core::fmt::{self, Write};
+
+	struct Limited(usize);
+	impl Write for Limited {
+		fn write_str(&mut self, s: &str) -> fmt::Result {
+			self.0 = self.0.checked_sub(s.len()).ok_or(fmt::Error)?;
+			Ok(())
+		}
+	}
+
+	let edn = edn::read_string(r#"{:a [1 "\t\r\n\\\"x" \c] :b #tag (x y) :m {:k 1}}"#).unwrap();
+	for pretty in [false, true] {
+		let len = if pretty { format!("{edn:#}") } else { format!("{edn}") }.len();
+		for budget in 0..len {
+			let result =
+				if pretty { write!(Limited(budget), "{edn:#}") } else { write!(Limited(budget), "{edn}") };
+			assert!(result.is_err(), "pretty: {pretty}, budget: {budget}");
+		}
+	}
+}
+
+#[test]
 fn pretty() {
 	let edn = edn::read_string(
     r#"#app/config {:empty [], :items [{:name "Gato", :roles #{:admin :user}} {:name "Nyanko", :roles #{}}], :pair (1 2)}"#,
