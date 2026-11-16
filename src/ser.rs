@@ -1,7 +1,7 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use core::fmt::{Display, Write};
+use core::fmt::{Debug, Display, Write};
 
 use serde::{Serialize, ser};
 
@@ -23,6 +23,19 @@ impl Serializer {
 
 	const fn current_compound_is_pretty(&self) -> bool {
 		self.pretty && self.compound_is_empty.len() <= MAX_PRETTY_DEPTH
+	}
+
+	fn write_float<F: Debug + Display>(&mut self, v: F, is_finite: bool) -> Result<()> {
+		if !is_finite {
+			return Err(ser::Error::custom(format!(
+				"can't serialize {v} as a round-trippable EDN float"
+			)));
+		}
+		// Infallible: String::write_fmt never errors, but handle for correctness.
+		self
+			.output
+			.write_fmt(format_args!("{v:?}"))
+			.map_err(|e| ser::Error::custom(format!("failed to format {v}: {e}")))
 	}
 
 	fn write_separator(&mut self, separator: &str) -> Result<()> {
@@ -187,16 +200,11 @@ impl ser::Serializer for &mut Serializer {
 	}
 
 	fn serialize_f32(self, v: f32) -> Result<()> {
-		self.serialize_f64(f64::from(v))
+		self.write_float(v, v.is_finite())
 	}
 
 	fn serialize_f64(self, v: f64) -> Result<()> {
-		// Infallible: String::write_fmt never errors, but handle for correctness.
-		self
-			.output
-			.write_fmt(format_args!("{v}"))
-			.map_err(|e| ser::Error::custom(format!("failed to format {v}: {e}")))?;
-		Ok(())
+		self.write_float(v, v.is_finite())
 	}
 
 	fn serialize_char(self, v: char) -> Result<()> {

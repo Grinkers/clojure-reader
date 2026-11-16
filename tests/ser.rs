@@ -171,6 +171,20 @@ mod test {
 	}
 
 	#[test]
+	fn floats_keep_float_marker() {
+		assert_eq!(to_string(&1.0f64).unwrap(), "1.0");
+		assert_eq!(to_string(&vec![1.5f64, 2.0]).unwrap(), "[1.5 2.0]");
+		assert_eq!(to_string(&0.1f32).unwrap(), "0.1");
+	}
+
+	#[test]
+	fn non_finite_floats_are_rejected() {
+		assert!(to_string(&f64::NAN).is_err());
+		assert!(to_string(&f64::INFINITY).is_err());
+		assert!(to_string(&f32::NEG_INFINITY).is_err());
+	}
+
+	#[test]
 	fn sequence_separator_uses_state() {
 		assert_eq!(to_string(&vec!['[', 'x']).unwrap(), r#"[\[ \x]"#);
 	}
@@ -243,7 +257,7 @@ mod test {
 
 		let expected = "{:int 42, :silly_cat true, \
                      :foo {1 -1, 2 -42}, :bar [1 2 42 3], \
-                     :some_nums {:num_i16 42, :num_i32 9042, :num_f32 9000.419921875, :num_f64 904200.42}, \
+                     :some_nums {:num_i16 42, :num_i32 9042, :num_f32 9000.42, :num_f64 904200.42}, \
                      :character \\c, :fancy_char \\newline, :seqs {:tup [42 \"猫\"], :empty nil}}";
 		assert_eq!(expected, to_string(&test).unwrap());
 	}

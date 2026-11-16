@@ -710,7 +710,7 @@ impl Edn<'_> {
 			Self::Str(s) => write_string(f, s),
 			Self::Int(i) => write!(f, "{i}"),
 			#[cfg(feature = "floats")]
-			Self::Double(d) => write!(f, "{d}"),
+			Self::Double(d) => write!(f, "{:?}", d.0),
 			#[cfg(feature = "arbitrary-nums")]
 			Self::BigInt(bi) => write!(f, "{bi}N"),
 			#[cfg(feature = "arbitrary-nums")]

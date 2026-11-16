@@ -158,6 +158,18 @@ fn collections() {
 }
 
 #[test]
+#[cfg(feature = "floats")]
+fn doubles_keep_float_marker() {
+	display!("1.0");
+	display!("-0.0");
+	display!("[1.5 2.0]");
+	for value in [8e8, f64::MAX, 1e-7] {
+		let edn = Edn::Double(value.into());
+		assert_eq!(edn::read_string(&edn.to_string()).unwrap(), edn, "{value:?}");
+	}
+}
+
+#[test]
 #[cfg(feature = "arbitrary-nums")]
 fn big_nums() {
 	display!(
