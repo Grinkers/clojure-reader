@@ -647,6 +647,21 @@ pub(crate) fn decode_string(raw: &str, span: parse::Span) -> error::Result<Cow<'
 	Ok(Cow::Owned(decoded))
 }
 
+#[cfg(any(feature = "floats", feature = "serde"))]
+pub(crate) fn write_float<W: fmt::Write, F: Copy + fmt::Debug + Into<f64>>(
+	writer: &mut W,
+	value: F,
+) -> fmt::Result {
+	let wide: f64 = value.into();
+	if wide.is_nan() {
+		writer.write_str("##NaN")
+	} else if wide.is_infinite() {
+		writer.write_str(if wide.is_sign_positive() { "##Inf" } else { "##-Inf" })
+	} else {
+		write!(writer, "{value:?}")
+	}
+}
+
 pub(crate) fn write_string<W: fmt::Write>(writer: &mut W, value: &str) -> fmt::Result {
 	writer.write_char('"')?;
 	for c in value.chars() {
@@ -710,7 +725,7 @@ impl Edn<'_> {
 			Self::Str(s) => write_string(f, s),
 			Self::Int(i) => write!(f, "{i}"),
 			#[cfg(feature = "floats")]
-			Self::Double(d) => write!(f, "{:?}", d.0),
+			Self::Double(d) => write_float(f, d.0),
 			#[cfg(feature = "arbitrary-nums")]
 			Self::BigInt(bi) => write!(f, "{bi}N"),
 			#[cfg(feature = "arbitrary-nums")]

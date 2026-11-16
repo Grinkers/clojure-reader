@@ -13,6 +13,32 @@ mod test {
 	}
 
 	#[test]
+	fn read_symbolic_values() {
+		use clojure_reader::error::Code;
+
+		let cases = [("##Inf", f64::INFINITY), ("##-Inf", f64::NEG_INFINITY), ("##NaN", f64::NAN)];
+		for (input, expected) in cases {
+			assert_eq!(edn::read_string(input).unwrap(), Edn::Double(expected.into()), "{input}");
+		}
+		assert_eq!(
+			edn::read_string("[##Inf]").unwrap(),
+			Edn::Vector(vec![Edn::Double(f64::INFINITY.into())])
+		);
+
+		// Clojure reads the symbol as the next form, so whitespace and discards may precede it.
+		for input in ["## Inf", "## #_x Inf"] {
+			assert_eq!(edn::read_string(input).unwrap(), Edn::Double(f64::INFINITY.into()), "{input}");
+		}
+
+		for input in
+			["##inf", "##+Inf", "##Foo", "##Inf1", "##:Inf", r#"##"Inf""#, "##[Inf]", "####Inf"]
+		{
+			assert_eq!(edn::read_string(input).unwrap_err().code, Code::InvalidNumber, "{input}");
+		}
+		assert_eq!(edn::read_string("##").unwrap_err().code, Code::UnexpectedEOF);
+	}
+
+	#[test]
 	fn maps() {
 		let e = "{
         :cat \"猫\" ; this is utf-8

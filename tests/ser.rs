@@ -178,10 +178,10 @@ mod test {
 	}
 
 	#[test]
-	fn non_finite_floats_are_rejected() {
-		assert!(to_string(&f64::NAN).is_err());
-		assert!(to_string(&f64::INFINITY).is_err());
-		assert!(to_string(&f32::NEG_INFINITY).is_err());
+	fn non_finite_floats_are_symbolic_values() {
+		assert_eq!(to_string(&f64::NAN).unwrap(), "##NaN");
+		assert_eq!(to_string(&f64::INFINITY).unwrap(), "##Inf");
+		assert_eq!(to_string(&f32::NEG_INFINITY).unwrap(), "##-Inf");
 	}
 
 	#[test]

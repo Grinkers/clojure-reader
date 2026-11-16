@@ -479,6 +479,7 @@ enum ContextKind<'e, B: InternalParser<'e>> {
 	Set(B::SetContext, Position),
 	Tag(&'e str, /* Span of the tag string */ Span, Position),
 	Discard(Position),
+	Symbolic,
 }
 
 struct ParseContext<'e, B: InternalParser<'e>> {
@@ -1000,58 +1001,61 @@ fn handle_open_delimiter<'e, B: InternalParser<'e>>(
 	delim: OpenDelimiter,
 ) -> Result<(), Error> {
 	let pos_start = walker.pos();
+	let _ = walker.reader.nibble_next();
+	if matches!(walker.stack.last(), Some(ParseContext { kind: ContextKind::Symbolic, .. }))
+		&& !(matches!(delim, OpenDelimiter::Hash) && walker.reader.peek_next() == Some('_'))
+	{
+		return Err(Error::from_position(Code::InvalidNumber, pos_start));
+	}
 	match delim {
 		OpenDelimiter::Vector => {
-			let _ = walker.reader.nibble_next();
 			walker.push_context(ParseContext::no_discards(ContextKind::Vector(
 				builder.new_vector_context(),
 				pos_start,
 			)));
 		}
 		OpenDelimiter::List => {
-			let _ = walker.reader.nibble_next();
 			walker.push_context(ParseContext::no_discards(ContextKind::List(
 				builder.new_list_context(),
 				pos_start,
 			)));
 		}
 		OpenDelimiter::Map => {
-			let _ = walker.reader.nibble_next();
 			walker.push_context(ParseContext::no_discards(ContextKind::Map(
 				builder.new_map_context(),
 				pos_start,
 			)));
 		}
-		OpenDelimiter::Hash => {
-			let _ = walker.reader.nibble_next();
-			match walker.reader.peek_next() {
-				Some('{') => {
-					let _ = walker.reader.nibble_next();
-					walker.push_context(ParseContext::no_discards(ContextKind::Set(
-						builder.new_set_context(),
-						pos_start,
-					)));
-				}
-				Some('_') => {
-					let _ = walker.reader.nibble_next();
-					walker.push_context(ParseContext::no_discards(ContextKind::Discard(pos_start)));
-				}
-				Some(c) if !c.is_whitespace() && !DELIMITERS.contains(&c) => {
-					let tag_pos_start = walker.pos();
-					let tag = walker.reader.slurp_tag()?;
-					let tag_span = walker.span_from(tag_pos_start);
-					if tag.is_empty() {
-						return Err(walker.make_error(Code::InvalidTag));
-					}
-
-					walker.reader.nibble_whitespace();
-					walker
-						.push_context(ParseContext::no_discards(ContextKind::Tag(tag, tag_span, pos_start)));
-				}
-				Some(_) => return Err(walker.make_error(Code::InvalidTag)),
-				None => return Err(walker.make_error(Code::UnexpectedEOF)),
+		OpenDelimiter::Hash => match walker.reader.peek_next() {
+			Some('{') => {
+				let _ = walker.reader.nibble_next();
+				walker.push_context(ParseContext::no_discards(ContextKind::Set(
+					builder.new_set_context(),
+					pos_start,
+				)));
 			}
-		}
+			Some('_') => {
+				let _ = walker.reader.nibble_next();
+				walker.push_context(ParseContext::no_discards(ContextKind::Discard(pos_start)));
+			}
+			Some('#') => {
+				let _ = walker.reader.nibble_next();
+				walker.push_context(ParseContext::no_discards(ContextKind::Symbolic));
+			}
+			Some(c) if !c.is_whitespace() && !DELIMITERS.contains(&c) => {
+				let tag_pos_start = walker.pos();
+				let tag = walker.reader.slurp_tag()?;
+				let tag_span = walker.span_from(tag_pos_start);
+				if tag.is_empty() {
+					return Err(walker.make_error(Code::InvalidTag));
+				}
+
+				walker.reader.nibble_whitespace();
+				walker.push_context(ParseContext::no_discards(ContextKind::Tag(tag, tag_span, pos_start)));
+			}
+			Some(_) => return Err(walker.make_error(Code::InvalidTag)),
+			None => return Err(walker.make_error(Code::UnexpectedEOF)),
+		},
 	}
 	Ok(())
 }
@@ -1179,7 +1183,28 @@ fn parse_internal<'e, B: InternalParser<'e>>(
 			Some(c) => {
 				let pos_start = walker.reader.read_pos;
 				let span;
-				let item = if c == '"' {
+				let item = if matches!(
+					walker.stack.last(),
+					Some(ParseContext { kind: ContextKind::Symbolic, .. })
+				) {
+					if matches!(c, '"' | '\\') {
+						return Err(Error::from_position(Code::InvalidNumber, pos_start));
+					}
+					let atom = match walker.reader.slurp_literal() {
+						#[cfg(feature = "floats")]
+						"Inf" => Ok(Atom::Double(f64::INFINITY.into())),
+						#[cfg(feature = "floats")]
+						"-Inf" => Ok(Atom::Double(f64::NEG_INFINITY.into())),
+						#[cfg(feature = "floats")]
+						"NaN" => Ok(Atom::Double(f64::NAN.into())),
+						_ => Err(Error::from_position(Code::InvalidNumber, pos_start)),
+					}?;
+					let ParseContext { discards, .. } =
+						walker.pop_context().expect("symbolic context should be on top of the stack");
+					walker.stack.last_mut().expect("Top should be there").discards.extend(discards);
+					span = walker.reader.span_from(pos_start);
+					builder.atom(atom, span)
+				} else if c == '"' {
 					let raw = walker.reader.slurp_str()?;
 					span = walker.reader.span_from(pos_start);
 					builder.string(raw, span)?

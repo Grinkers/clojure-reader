@@ -170,6 +170,13 @@ fn doubles_keep_float_marker() {
 }
 
 #[test]
+#[cfg(feature = "floats")]
+fn non_finite_doubles_round_trip() {
+	display!("[##Inf ##-Inf ##NaN]");
+	display_diff!("##-Inf", "-3E8446744078409551615");
+}
+
+#[test]
 #[cfg(feature = "arbitrary-nums")]
 fn big_nums() {
 	display!(
