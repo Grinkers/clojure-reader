@@ -1,6 +1,6 @@
 [package]
 name = "clojure-reader"
-version = "0.7.1"
+version = "0.7.2"
 edition = "2024"
 resolver = "2"
 authors = ["Kevin Nakamura <grinkers@grinkers.net>"]
